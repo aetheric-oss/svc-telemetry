@@ -786,6 +786,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "ordered-float"
+version = "3.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d84eb1409416d254e4a9c8fa56cc24701755025b458f0fcd8e59e1f5f40c23bf"
+dependencies = [
+ "num-traits",
+ "serde",
+]
+
+[[package]]
 name = "packed_struct"
 version = "0.10.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1105,7 +1115,7 @@ version = "0.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f3a1a3341211875ef120e117ea7fd5228530ae7e7036a779fdc9117be6b3282c"
 dependencies = [
- "ordered-float",
+ "ordered-float 2.10.0",
  "serde",
 ]
 
@@ -1187,6 +1197,7 @@ dependencies = [
  "log",
  "log4rs",
  "openssl",
+ "ordered-float 3.4.0",
  "packed_struct",
  "prost",
  "prost-build",
@@ -1217,6 +1228,7 @@ version = "0.1.0"
 dependencies = [
  "chrono",
  "hyper",
+ "ordered-float 3.4.0",
  "packed_struct",
  "serde",
  "serde_json",

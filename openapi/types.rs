@@ -10,6 +10,7 @@
 use serde::{Deserialize, Serialize};
 use utoipa::{IntoParams, ToSchema};
 use uuid::Uuid;
+use ordered_float::OrderedFloat;
 
 /// Reduced telemetry from the asset
 /// Reduced bandwidth for nominal flight
@@ -51,11 +52,11 @@ impl BasicTelemetryData {
 #[derive(Deserialize, Serialize)]
 pub struct PositionData {
     /// current latitude
-    pub latitude: f32,
+    pub latitude: OrderedFloat<f32>,
 
     /// current longitude
-    pub longitude: f32,
+    pub longitude: OrderedFloat<f32>,
 
     /// current altitude in meters
-    pub altitude_meters: f32,
+    pub altitude_meters: OrderedFloat<f32>,
 }

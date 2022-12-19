@@ -22,6 +22,7 @@ chrono        = { version = "0.4", features = ["serde"] }
 hyper         = "0.14"
 log           = "0.4"
 openssl       = "0.10"
+ordered-float = { version = "3.4", features = ["serde"] }
 packed_struct = "0.10"
 prost         = "0.11"
 prost-build   = "0.11"
