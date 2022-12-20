@@ -1,4 +1,4 @@
-# Interface Control Document (ICD) - `svc-FIXME`
+# Interface Control Document (ICD) - `svc-telemetry`
 
 <center>
 
@@ -8,7 +8,7 @@
 
 ## Overview
 
-This document defines the gRPC and REST interfaces unique to the `svc-FIXME` microservice.
+This document defines the gRPC and REST interfaces unique to the `svc-telemetry` microservice.
 
 Attribute | Description
 --- | ---
@@ -20,9 +20,9 @@ Document | Description
 --- | ---
 :construction: High-Level Concept of Operations (CONOPS) | Overview of Arrow microservices.
 :construction: High-Level Interface Control Document (ICD) | Interfaces and frameworks common to all Arrow microservices.
-:construction: Requirements - `svc-FIXME` | Requirements and user stories for this microservice.
-[Concept of Operations - `svc-FIXME`](./conops.md) | Defines the motivation and duties of this microservice.
-[Software Design Document (SDD) - `svc-FIXME`](./sdd.md) | Specifies the internal activity of this microservice.
+:construction: Requirements - `svc-telemetry` | Requirements and user stories for this microservice.
+[Concept of Operations - `svc-telemetry`](./conops.md) | Defines the motivation and duties of this microservice.
+[Software Design Document (SDD) - `svc-telemetry`](./sdd.md) | Specifies the internal activity of this microservice.
 
 ## Frameworks
 
