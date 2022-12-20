@@ -1,4 +1,4 @@
-# Concept of Operations - `svc-FIXME`
+# Concept of Operations - `svc-telemetry`
 
 <center>
 
@@ -23,9 +23,9 @@ Document | Description
 --- | ---
 [High-Level Concept of Operations (CONOPS)](https://github.com/Arrow-air/se-services/blob/develop/docs/conops.md) | Overview of Arrow microservices.
 [High-Level Interface Control Document (ICD)](https://github.com/Arrow-air/se-services/blob/develop/docs/icd.md) | Interfaces and frameworks common to all Arrow microservices.
-:construction: Requirements - `svc-FIXME` | Requirements and user stories for this microservice.
-[Interface Control Document (ICD) - `svc-FIXME`](./icd.md) | Defines the inputs and outputs of this microservice.
-[Software Design Document (SDD) - `svc-FIXME`](./sdd.md) | Specifies the internal activity of this microservice.
+:construction: Requirements - `svc-telemetry` | Requirements and user stories for this microservice.
+[Interface Control Document (ICD) - `svc-telemetry`](./icd.md) | Defines the inputs and outputs of this microservice.
+[Software Design Document (SDD) - `svc-telemetry`](./sdd.md) | Specifies the internal activity of this microservice.
 
 ## Motivation
 
