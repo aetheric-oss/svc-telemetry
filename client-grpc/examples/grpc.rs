@@ -2,8 +2,8 @@
 
 use std::env;
 #[allow(unused_qualifications, missing_docs)]
-use svc_template_rust_client_grpc::client::{
-    template_rust_rpc_client::TemplateRustRpcClient, QueryIsReady,
+use svc_telemetry_client_grpc::client::{
+    svc_telemetry_rpc_client::SvcTelemetryRpcClient, QueryIsReady,
 };
 
 /// Provide endpoint url to use
@@ -22,7 +22,7 @@ pub fn get_grpc_endpoint() -> String {
     format!("http://{}:{}", address, port)
 }
 
-/// Example svc-template-client-grpc
+/// Example svc-telemetry-client-grpc
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let grpc_endpoint = get_grpc_endpoint();
@@ -32,7 +32,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         grpc_endpoint
     );
 
-    let mut client = TemplateRustRpcClient::connect(grpc_endpoint).await?;
+    let mut client = SvcTelemetryRpcClient::connect(grpc_endpoint).await?;
 
     println!("Client created");
 
