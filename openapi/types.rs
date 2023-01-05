@@ -1,16 +1,14 @@
-/// Types used for REST communication with the server
-// mod status;
-// mod error;
-// mod warning;
 
-// use status::Status;
-// use error::Errors;
-// use warning::Warnings;
+/// CCSDS Packet Library
+
+#[allow(dead_code)]
+mod ccsds;
 
 use serde::{Deserialize, Serialize};
 use utoipa::{IntoParams, ToSchema};
 use uuid::Uuid;
 use ordered_float::OrderedFloat;
+
 
 /// Reduced telemetry from the asset
 /// Reduced bandwidth for nominal flight
@@ -33,17 +31,6 @@ pub struct BasicTelemetryData {
 
     // // Active Errors
     // pub errors: Errors,
-
-    /// Data Checksum
-    checksum: u32
-}
-
-impl BasicTelemetryData {
-    #[allow(dead_code)]
-    fn checksum_update(&mut self) {
-        self.checksum = 0x0;
-        todo!();
-    }
 }
 
 /// Global location of the asset

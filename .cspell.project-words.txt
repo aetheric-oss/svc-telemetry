@@ -28,3 +28,6 @@ tftpl
 commitlintrc
 utoipa
 openapi
+apid
+ccsds
+thiserror

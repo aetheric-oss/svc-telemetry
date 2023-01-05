@@ -4,3 +4,6 @@
 pub mod types {
     include!("../../openapi/types.rs");
 }
+
+#[macro_use]
+extern crate packed_struct;

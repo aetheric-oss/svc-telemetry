@@ -1,6 +1,9 @@
 //! gRPC server implementation
 
-///module generated from grpc.proto
+#[macro_use]
+extern crate packed_struct;
+
+/// Module generated from grpc.proto
 pub mod grpc {
     #![allow(unused_qualifications, missing_docs)]
     include!("grpc.rs");
