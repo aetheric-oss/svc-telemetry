@@ -28,3 +28,5 @@ tftpl
 commitlintrc
 utoipa
 openapi
+ccsds
+adsb
