@@ -28,3 +28,10 @@ tftpl
 commitlintrc
 utoipa
 openapi
+stuckee
+flightradar
+aerion
+crowdsourcing
+ccsds
+ads-b
+adsb
