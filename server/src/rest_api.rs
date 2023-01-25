@@ -33,7 +33,7 @@ macro_rules! req_debug {
 /// Post ADS-B Telemetry
 #[utoipa::path(
     post,
-    path = "/tlm/adsb",
+    path = "/telemetry/adsb",
     request_body = AdsbPacket,
     responses(
         (status = 200, description = "Telemetry received."),
