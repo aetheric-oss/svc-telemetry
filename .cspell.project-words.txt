@@ -35,3 +35,11 @@ crowdsourcing
 ccsds
 ads-b
 adsb
+mavlink
+deadpool
+deser
+loglevel
+flushdb
+flushall
+psetex
+pexpire
