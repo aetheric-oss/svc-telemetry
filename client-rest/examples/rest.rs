@@ -1,87 +1,147 @@
 //! Example communication with this service
 
-// use hyper::{Body, Client, Method, Request, Response};
-// use hyper::{Error, StatusCode};
-// use std::time::{Duration, SystemTime};
-// use svc_telemetry_client_rest::types::*;
+use hyper::{Body, Client, Method, Request, Response};
+use hyper::{Error, StatusCode};
+use svc_telemetry_client_rest::types::{
+    MavFrame, MavMessage, MavlinkMessage, MavlinkVersion, ADSB_VEHICLE_DATA,
+};
 
-// fn evaluate(resp: Result<Response<Body>, Error>, expected_code: StatusCode) -> (bool, String) {
-//     let mut ok = true;
-//     let result_str: String = match resp {
-//         Ok(r) => {
-//             let tmp = r.status() == expected_code;
-//             ok &= tmp;
-//             println!("{:?}", r.body());
+async fn evaluate(
+    response: Result<Response<Body>, Error>,
+    expected_code: StatusCode,
+    expected_count: i64,
+) {
+    let Ok(response) = response else {
+        println!("Response was an Err() type: {:?}", response.unwrap_err());
+        return;
+    };
 
-//             r.status().to_string()
-//         }
-//         Err(e) => {
-//             ok = false;
-//             e.to_string()
-//         }
-//     };
+    let status = response.status();
 
-//     (ok, result_str)
-// }
+    if status != expected_code {
+        println!("expected code: {}, actual: {}", expected_code, status);
+        return;
+    }
+
+    let bytes = hyper::body::to_bytes(response.into_body()).await.unwrap();
+    let reported_count: i64 = serde_json::from_slice(&bytes).unwrap();
+
+    if reported_count != expected_count {
+        println!(
+            "expected count: {}, actual: {}",
+            expected_count, reported_count
+        );
+        return;
+    }
+
+    println!("{} (body: {})", status.to_string(), reported_count);
+}
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    println!("NOTE: Ensure the server is running, or this example will fail.");
+    println!(
+        "NOTE: Ensure the server and redis containers are running, or this example will fail."
+    );
 
-    // let rest_port = std::env::var("HOST_PORT_REST").unwrap_or_else(|_| "8000".to_string());
+    let host = std::env::var("SERVER_HOSTNAME").unwrap_or_else(|_| "web-server".to_string());
+    let port = std::env::var("SERVER_PORT_REST").unwrap_or_else(|_| "8000".to_string());
 
-    // // let host_port = env!("HOST_PORT");
-    // let url = format!("http://0.0.0.0:{rest_port}");
-    // let mut ok = true;
-    // let client: Client<HttpConnector> = Client::builder()
-    //     .pool_idle_timeout(std::time::Duration::from_secs(10))
-    //     .build_http();
+    let url = format!("http://{host}:{port}");
+    let client = Client::builder()
+        .pool_idle_timeout(std::time::Duration::from_secs(10))
+        .build_http();
 
-    // PUT /telemetry/vertiport/
-    // {
-    //     let data = VertiportsQuery {
-    //         latitude: 32.7262,
-    //         longitude: 117.1544,
-    //     };
-    //     let data_str = serde_json::to_string(&data).unwrap();
-    //     let uri = format!("{}/telemetry/vertiport", url);
-    //     let req = Request::builder()
-    //         .method(Method::PUT)
-    //         .uri(uri.clone())
-    //         .header("content-type", "application/json")
-    //         .body(Body::from(data_str))
-    //         .unwrap();
+    let uri = format!("{}/telemetry/mavlink/adsb", url);
+    let max: u8 = 4;
 
-    //     let resp = client.request(req).await;
-    //     let (success, result_str) = evaluate(resp, StatusCode::OK);
-    //     ok &= success;
+    // POST /telemetry/mavlink/adsb NOMINAL
+    println!(
+        "Send {} packets with different headers, expect \
+        response body value of 1 each time",
+        max + 1
+    );
+    {
+        for count in 0..=max {
+            let header = mavlink::MavHeader {
+                system_id: 10,
+                component_id: 0,
+                sequence: count,
+            };
 
-    //     println!("{}: {}", uri, result_str);
-    // }
+            let frame = MavFrame::<MavMessage> {
+                header,
+                msg: MavMessage::ADSB_VEHICLE(ADSB_VEHICLE_DATA::default()),
+                protocol_version: MavlinkVersion::V2,
+            };
 
-    // PUT /telemetry/:aircraft
-    // {
-    //     let data = TelemetryData {
-    //         latitude: 32.7262,
-    //         longitude: 117.1544,
-    //         altitude_meters: 1000.0,
+            let message = MavlinkMessage { bytes: frame.ser() };
 
-    //     };
-    //     let data_str = serde_json::to_string(&data).unwrap();
-    //     let uri = format!("{}/telemetry/vertiport", url);
-    //     let req = Request::builder()
-    //         .method(Method::PUT)
-    //         .uri(uri.clone())
-    //         .header("content-type", "application/json")
-    //         .body(Body::from(data_str))
-    //         .unwrap();
+            let data_str = serde_json::to_string(&message).unwrap();
+            let req = Request::builder()
+                .method(Method::POST)
+                .uri(uri.clone())
+                .header("content-type", "application/json")
+                .body(Body::from(data_str))
+                .unwrap();
 
-    //     let resp = client.request(req).await;
-    //     let (success, result_str) = evaluate(resp, StatusCode::OK);
-    //     ok &= success;
+            let resp = client.request(req).await;
 
-    //     println!("{}: {}", uri, result_str);
-    // }
+            // Expect this packet to be the first of its kind in the redis cache
+            //  (return value of 1)
+            evaluate(resp, StatusCode::OK, 1).await;
+        }
+    }
+
+    // POST /telemetry/mavlink/adsb REPEAT MESSAGES
+    let frame = MavFrame::<MavMessage> {
+        header: mavlink::MavHeader {
+            system_id: 10,
+            component_id: 0,
+            sequence: max,
+        },
+        msg: MavMessage::ADSB_VEHICLE(ADSB_VEHICLE_DATA::default()),
+        protocol_version: MavlinkVersion::V2,
+    };
+
+    let message = MavlinkMessage {
+        bytes: frame.clone().ser(),
+    };
+    let data_str = serde_json::to_string(&message).unwrap();
+
+    println!(
+        "Send the most recent packet again a few more times, \
+        expect incrementing response body values."
+    );
+    // Send the last packet (same header) a few more times
+    // expect the return values to be 2, 3, 4, etc. for each repeated packet
+    for expected_count in 2..=6 {
+        let req = Request::builder()
+            .method(Method::POST)
+            .uri(uri.clone())
+            .header("content-type", "application/json")
+            .body(Body::from(data_str.clone()))
+            .unwrap();
+
+        let resp = client.request(req).await;
+        evaluate(resp, StatusCode::OK, expected_count).await;
+    }
+
+    println!(
+        "Wait until after the expiration time, re-send and confirm \
+    this was received for the first time"
+    );
+    std::thread::sleep(std::time::Duration::from_millis(5000));
+    let req = Request::builder()
+        .method(Method::POST)
+        .uri(uri.clone())
+        .header("content-type", "application/json")
+        .body(Body::from(data_str))
+        .unwrap();
+
+    let resp = client.request(req).await;
+
+    // Expect response of "1", received for the first time
+    evaluate(resp, StatusCode::OK, 1).await;
 
     Ok(())
 }

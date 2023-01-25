@@ -1,9 +1,38 @@
 ---
 version: '3.6'
+volumes:
+  redis-data:
+
 services:
+  redis:
+    container_name: svc-telemetry-redis
+    image: redis:6.2-alpine
+    restart: always
+    expose:
+      - ${REDIS_PORT}
+    command: redis-server --save 20 1 --loglevel warning --port ${REDIS_PORT}
+    healthcheck:
+      test: ["CMD", "redis-cli","ping"]
+      interval: 2s
+      timeout: 1s
+      retries: 3
+    volumes:
+      - redis-data:/data
+    environment:
+      - REDIS_DISABLE_COMMANDS=FLUSHDB,FLUSHALL,CONFIG
+      - ALLOW_EMPTY_PASSWORD=yes
+      - REDIS_PORT_NUMBER=${REDIS_PORT}
+
   web-server:
     container_name: ${DOCKER_NAME}-example-server
     image: ${PACKAGE_NAME}:latest
+    depends_on:
+      redis:
+        condition: service_healthy
+    volumes:
+      - type: bind
+        source: log4rs.yaml
+        target: /log4rs.yaml
     ports:
       - ${HOST_PORT_REST}:${DOCKER_PORT_REST}
       - ${HOST_PORT_GRPC}:${DOCKER_PORT_GRPC}
@@ -12,6 +41,9 @@ services:
       interval: 2s
       timeout: 1s
       retries: 3
+    environment:
+      REDIS_HOST: ${REDIS_HOST}
+      REDIS_PORT: ${REDIS_PORT}
 
   example:
     links:
