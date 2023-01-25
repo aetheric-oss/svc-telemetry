@@ -7,7 +7,7 @@ version = "0.1.0"
 
 [dependencies]
 chrono        = { version = "0.4", features = ["serde"] }
-lib-ccsds     = { git = "https://github.com/Arrow-air/lib-ccsds", branch = "develop" }
+mavlink       = "0.10"
 ordered-float = { version = "3.4", features = ["serde"] }
 packed_struct = "0.10.1"
 serde         = "1.0"
