@@ -34,6 +34,7 @@ macro_rules! req_debug {
 #[utoipa::path(
     post,
     path = "/telemetry/adsb",
+    tag = "svc-telemetry",
     request_body = AdsbPacket,
     responses(
         (status = 200, description = "Telemetry received."),
