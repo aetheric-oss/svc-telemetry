@@ -1,13 +1,5 @@
-use serde::{Deserialize, Serialize};
-use utoipa::ToSchema;
 pub use mavlink::{MavFrame, MavHeader, MavlinkVersion, Message};
 pub use mavlink::common::{MavMessage, ADSB_VEHICLE_DATA};
-
-/// Contains the bytes of a Mavlink protocol message
-#[derive(Serialize, Deserialize, ToSchema)]
-pub struct MavlinkMessage {
-    pub bytes: Vec<u8>
-}
 
 pub trait Keys {
     /// Often the aircraft ID

@@ -1,4 +1,5 @@
 [package]
+authors     = ["A.M. Smith <amsmith@arrowair.com>"]
 description = "Telemetry Service GRPC and REST servers"
 edition     = "2021"                                                       # Allowed values are 2015, 2018, 2021
 homepage    = "https://www.arrowair.com/docs/documentation/services/intro"
@@ -52,7 +53,7 @@ version = "1.2"
 
 [dependencies.utoipa]
 features = ["axum_extras", "chrono"]
-version  = "2.2"
+version  = "3.0"
 
 [dev-dependencies.cargo-husky]
 default-features = false          # Disable features which are enabled by default
