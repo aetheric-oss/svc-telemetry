@@ -57,9 +57,6 @@ struct Cli {
     paths(
         rest_api::mavlink_adsb,
     ),
-    components(
-        schemas(rest_api::MavlinkMessage)
-    ),
     tags(
         (name = "svc-telemetry", description = "svc-telemetry REST API")
     )

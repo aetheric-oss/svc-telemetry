@@ -2,7 +2,7 @@
 
 use crate::cache::RedisPool;
 use crate::grpc_clients::GrpcClients;
-use axum::{extract::Extension, Json};
+use axum::{body::Bytes, extract::Extension, Json};
 use snafu::prelude::Snafu;
 use std::cmp::Ordering;
 
@@ -13,7 +13,7 @@ pub mod rest_types {
 
 pub use mavlink::{common::MavMessage, MavFrame, MavlinkVersion, Message};
 
-pub use rest_types::{Keys, MavlinkMessage};
+pub use rest_types::Keys;
 
 // /// Writes an info! message to the app::req logger
 // macro_rules! req_info {
@@ -75,7 +75,7 @@ async fn process_mavlink(
     post,
     path = "/telemetry/mavlink/adsb",
     tag = "svc-telemetry",
-    request_body = MavlinkMessage,
+    request_body = Vec<u8>,
     responses(
         (status = 200, description = "Telemetry received."),
         (status = 400, description = "Malformed packet."),
@@ -85,11 +85,11 @@ async fn process_mavlink(
 pub async fn mavlink_adsb(
     Extension(mavlink_cache): Extension<RedisPool>,
     Extension(mut _grpc_clients): Extension<GrpcClients>,
-    Json(payload): Json<MavlinkMessage>,
+    payload: Bytes,
 ) -> Result<Json<i64>, hyper::StatusCode> {
     req_debug!("(mavlink_adsb) entry");
 
-    let result = process_mavlink(&payload.bytes, mavlink_cache).await;
+    let result = process_mavlink(&payload, mavlink_cache).await;
     let Ok((_frame, count)) = result else {
         match result {
             Err(ProcessError::CouldNotParse) => {

@@ -2,9 +2,7 @@
 
 use hyper::{Body, Client, Method, Request, Response};
 use hyper::{Error, StatusCode};
-use svc_telemetry_client_rest::types::{
-    MavFrame, MavMessage, MavlinkMessage, MavlinkVersion, ADSB_VEHICLE_DATA,
-};
+use svc_telemetry_client_rest::types::{MavFrame, MavMessage, MavlinkVersion, ADSB_VEHICLE_DATA};
 
 async fn evaluate(
     response: Result<Response<Body>, Error>,
@@ -74,14 +72,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 protocol_version: MavlinkVersion::V2,
             };
 
-            let message = MavlinkMessage { bytes: frame.ser() };
-
-            let data_str = serde_json::to_string(&message).unwrap();
+            let bytes = frame.ser();
             let req = Request::builder()
                 .method(Method::POST)
                 .uri(uri.clone())
-                .header("content-type", "application/json")
-                .body(Body::from(data_str))
+                .header("content-type", "application/octet-stream")
+                .body(Body::from(bytes.clone()))
                 .unwrap();
 
             let resp = client.request(req).await;
@@ -103,10 +99,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         protocol_version: MavlinkVersion::V2,
     };
 
-    let message = MavlinkMessage {
-        bytes: frame.clone().ser(),
-    };
-    let data_str = serde_json::to_string(&message).unwrap();
+    let bytes = frame.ser();
 
     println!(
         "Send the most recent packet again a few more times, \
@@ -118,8 +111,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         let req = Request::builder()
             .method(Method::POST)
             .uri(uri.clone())
-            .header("content-type", "application/json")
-            .body(Body::from(data_str.clone()))
+            .header("content-type", "application/octet-stream")
+            .body(Body::from(bytes.clone()))
             .unwrap();
 
         let resp = client.request(req).await;
@@ -134,8 +127,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let req = Request::builder()
         .method(Method::POST)
         .uri(uri.clone())
-        .header("content-type", "application/json")
-        .body(Body::from(data_str))
+        .header("content-type", "application/octet-stream")
+        .body(Body::from(bytes))
         .unwrap();
 
     let resp = client.request(req).await;
