@@ -1,14 +1,29 @@
-use serde::{Deserialize, Serialize};
-use utoipa::{IntoParams, ToSchema};
+pub use mavlink::{MavFrame, MavHeader, MavlinkVersion, Message};
+pub use mavlink::common::{MavMessage, ADSB_VEHICLE_DATA};
 
-/// Adsb Packet wraps an adsb message and adds sender node UUID
-#[allow(dead_code)]
-#[derive(Debug, Clone, IntoParams, ToSchema)]
-#[derive(Deserialize, Serialize)]
-pub struct AdsbPacket {
-    /// Asset ID
-    pub sender_uuid: String,
+pub trait Keys {
+    /// Often the aircraft ID
+    fn primary_key(&self) -> u32;
 
-    /// ads-b packet contents
-    pub adsb: Vec<u8>,
+    /// The sequence number, timestamp, or checksum
+    fn secondary_key(&self) -> u32;
+
+    fn hashed_key(&self) -> u32 {
+        let p = self.primary_key();
+
+        // p*(large odd number) + s
+        // better than bitwise XOR for avoiding collisions
+        (p << 4) + p + self.secondary_key()
+    }
+}
+
+impl Keys for MavHeader
+{
+    fn primary_key(&self) -> u32 {
+        self.system_id as u32
+    }
+
+    fn secondary_key(&self) -> u32 {
+        self.sequence as u32
+    }
 }

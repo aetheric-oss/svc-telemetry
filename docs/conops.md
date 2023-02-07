@@ -46,7 +46,8 @@ It should expose a private API for:
 
 If telemetry is not being actively pushed to the network, `svc-telemetry` should subscribe to existing ADS-B streams from third-party providers, such as [Aerion](https://aireon.com/), [flightradar24](https://www.flightradar24.com/), or [FlightAware](https://flightaware.com).
 - These services cost a subscription fee but provide wide coverage.
-- These services receive their ADS-B telemetry from proprietary facilities and through [crowdsourcing](https://flightaware.com/adsb/piaware/build/).
+- These services receive their ADS-B telemetry from proprietary facilities and through public crowdsourcing
+    - Individuals with software-defined radio USB dongles can forward capture ADS-B to the service in return for enterprise features on the service.
 - They process the data, store it, and provide "real-time" streams to subscribers.
 
 ## External Interfaces
