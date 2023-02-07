@@ -43,3 +43,4 @@ flushdb
 flushall
 psetex
 pexpire
+autonumber
