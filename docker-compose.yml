@@ -1,0 +1,70 @@
+---
+version: '3.6'
+volumes:
+  redis-data:
+
+services:
+  redis:
+    container_name: svc-telemetry-redis
+    image: redis:6.2-alpine
+    restart: always
+    expose:
+      - ${REDIS_PORT}
+    command: redis-server --save 20 1 --loglevel warning --port ${REDIS_PORT}
+    healthcheck:
+      test: ["CMD", "redis-cli","ping"]
+      interval: 2s
+      timeout: 1s
+      retries: 3
+    volumes:
+      - redis-data:/data
+    environment:
+      - REDIS_DISABLE_COMMANDS=FLUSHDB,FLUSHALL,CONFIG
+      - ALLOW_EMPTY_PASSWORD=yes
+      - REDIS_PORT_NUMBER=${REDIS_PORT}
+
+  web-server:
+    container_name: ${DOCKER_NAME}-example-server
+    image: ${PACKAGE_NAME}:latest
+    depends_on:
+      redis:
+        condition: service_healthy
+    volumes:
+      - type: bind
+        source: log4rs.yaml
+        target: /log4rs.yaml
+    ports:
+      - ${HOST_PORT_REST}:${DOCKER_PORT_REST}
+      - ${HOST_PORT_GRPC}:${DOCKER_PORT_GRPC}
+    healthcheck:
+      test: ["CMD", "grpc_health_probe", "-addr", "localhost:${DOCKER_PORT_GRPC}"]
+      interval: 2s
+      timeout: 1s
+      retries: 3
+    environment:
+      - REDIS_HOST
+      - REDIS_PORT
+      - STORAGE_HOST_GRPC
+      - STORAGE_PORT_GRPC
+
+  example:
+    links:
+      - web-server
+    depends_on:
+      web-server:
+        condition: service_healthy
+    container_name: ${DOCKER_NAME}-example
+    image: ${RUST_IMAGE_NAME}:${RUST_IMAGE_TAG}
+    volumes:
+      - type: bind
+        source: "${SOURCE_PATH}/"
+        target: "/usr/src/app"
+      - type: bind
+        source: "${SOURCE_PATH}/.cargo/registry"
+        target: "/usr/local/cargo/registry"
+    environment:
+      - SERVER_HOSTNAME
+      - SERVER_PORT_GRPC
+      - SERVER_PORT_REST
+      - EXAMPLE_TARGET
+    command: cargo run --manifest-path "${CARGO_MANIFEST_PATH}" --example "${EXAMPLE_TARGET}"
