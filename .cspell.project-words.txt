@@ -44,3 +44,4 @@ flushall
 psetex
 pexpire
 autonumber
+deku
