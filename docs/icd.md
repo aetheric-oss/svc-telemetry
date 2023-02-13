@@ -48,7 +48,9 @@ See the [Arrow API Documentation](https://www.arrowair.com/docs/category/apis) f
 
 | Endpoint | Type | Description |
 | ---- | --- | ---- |
+| `/telemetry/aircraft/adsb` | POST | Report a packet conforming to [ADS-B protocol](https://airmetar.main.jp/radio/ADS-B%20Decoding%20Guide.pdf).
 | `/telemetry/mavlink/adsb` | POST | Report a [Mavlink protocol](https://mavlink.io/en/guide/serialization.html) packet with an [ADS-B message payload](https://mavlink.io/en/messages/common.html#ADSB_VEHICLE).
+
 
 ## :speech_balloon: gRPC
 
