@@ -42,8 +42,10 @@ services:
       timeout: 1s
       retries: 3
     environment:
-      REDIS_HOST: ${REDIS_HOST}
-      REDIS_PORT: ${REDIS_PORT}
+      - REDIS_HOST
+      - REDIS_PORT
+      - STORAGE_HOST_GRPC
+      - STORAGE_PORT_GRPC
 
   example:
     links:

@@ -1,17 +1,15 @@
-// pub use svc_storage_client_grpc::client::{
-//     vertiport_rpc_client::VertiportRpcClient, SearchFilter, VertiportData,
-// };
+pub use svc_storage_client_grpc::adsb::rpc_service_client::RpcServiceClient as AdsbClient;
 
 use futures::lock::Mutex;
 use std::sync::Arc;
 pub use tonic::transport::Channel;
 
-// /// Writes an info! message to the app::grpc logger
-// macro_rules! grpc_info {
-//     ($($arg:tt)+) => {
-//         log::info!(target: "app::grpc", $($arg)+);
-//     };
-// }
+/// Writes an info! message to the app::grpc logger
+macro_rules! grpc_info {
+    ($($arg:tt)+) => {
+        log::info!(target: "app::grpc", $($arg)+);
+    };
+}
 
 /// Writes an error! message to the app::grpc logger
 macro_rules! grpc_error {
@@ -27,9 +25,10 @@ macro_rules! grpc_debug {
     };
 }
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Debug)]
 pub struct GrpcClients {
-    // pub storage: GrpcClient<TelemetryRpcClient<Channel>>,
+    /// Svc-Storage ADS-B Client
+    pub adsb: GrpcClient<AdsbClient<Channel>>,
 }
 
 #[derive(Debug, Clone)]
@@ -76,47 +75,56 @@ impl<T> GrpcClient<T> {
     }
 }
 
-// TODO Figure out how to collapse these three implementations for each client into
-//   one generic impl. VertiportRpcClient does not simply impl a trait,
-//   it wraps the tonic::client::Grpc<T> type so it's a bit tricky
-// impl GrpcClient<VertiportRpcClient<Channel>> {
-//     pub async fn get_client(&mut self) -> Option<VertiportRpcClient<Channel>> {
-//         grpc_debug!("(get_client) storage::vertiport entry");
+macro_rules! grpc_client {
+    ( $client: ident, $name: expr ) => {
+        impl GrpcClient<$client<Channel>> {
+            pub async fn get_client(&mut self) -> Option<$client<Channel>> {
+                grpc_debug!("(get_client) storage::{} entry", $name);
 
-//         let arc = Arc::clone(&self.inner);
-//         let mut client = arc.lock().await;
+                let arc = Arc::clone(&self.inner);
 
-//         if client.is_none() {
-//             grpc_info!(
-//                 "(grpc) connecting to svc-storage vertiport server at {}",
-//                 self.address.clone()
-//             );
-//             let client_option = match VertiportRpcClient::connect(self.address.clone()).await {
-//                 Ok(s) => Some(s),
-//                 Err(e) => {
-//                     grpc_error!(
-//                         "(grpc) couldn't connect to svc-storage vertiport server at {}; {}",
-//                         self.address,
-//                         e
-//                     );
-//                     None
-//                 }
-//             };
+                // if already connected, return the client
+                let client = arc.lock().await;
+                if client.is_some() {
+                    return client.clone();
+                }
 
-//             *client = client_option;
-//         }
+                grpc_debug!(
+                    "(grpc) connecting to {} server at {}",
+                    $name,
+                    self.address.clone()
+                );
+                let result = $client::connect(self.address.clone()).await;
+                match result {
+                    Ok(client) => {
+                        grpc_info!(
+                            "(grpc) success: connected to {} server at {}",
+                            $name,
+                            self.address.clone()
+                        );
+                        Some(client)
+                    }
+                    Err(e) => {
+                        grpc_error!(
+                            "(grpc) couldn't connect to {} server at {}; {}",
+                            $name,
+                            self.address,
+                            e
+                        );
+                        None
+                    }
+                }
+            }
+        }
+    };
+}
 
-//         client.clone()
-//     }
-// }
+grpc_client!(AdsbClient, "adsb");
 
 impl GrpcClients {
     pub fn default() -> Self {
         GrpcClients {
-            // storage: GrpcClient::<TelemetryStorageRpcClient<Channel>>::new(
-            //     "SCHEDULER_HOST_GRPC",
-            //     "SCHEDULER_PORT_GRPC",
-            // )
+            adsb: GrpcClient::<AdsbClient<Channel>>::new("STORAGE_HOST_GRPC", "STORAGE_PORT_GRPC"),
         }
     }
 }

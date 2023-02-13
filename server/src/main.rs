@@ -45,6 +45,9 @@ use utoipa::OpenApi;
 /// Mavlink entries in the cache will expire after 5 seconds
 const CACHE_EXPIRE_MS_MAVLINK_ADSB: u32 = 5000;
 
+/// Mavlink entries in the cache will expire after 10 seconds
+const CACHE_EXPIRE_MS_AIRCRAFT_ADSB: u32 = 10000;
+
 #[derive(Parser, Debug)]
 struct Cli {
     /// Target file to write the OpenAPI Spec
@@ -70,6 +73,7 @@ pub struct SvcTelemetryImpl {}
 #[tonic::async_trait]
 impl SvcTelemetryRpc for SvcTelemetryImpl {
     /// Returns ready:true when service is available
+    #[cfg(not(tarpaulin_include))]
     async fn is_ready(
         &self,
         _request: Request<QueryIsReady>,
@@ -118,6 +122,7 @@ async fn shutdown_signal(server: &str) {
 }
 
 /// Starts the grpc server for this microservice
+#[cfg(not(tarpaulin_include))]
 async fn grpc_server() {
     // GRPC Server
     let grpc_port = std::env::var("DOCKER_PORT_GRPC")
@@ -143,7 +148,12 @@ async fn grpc_server() {
 }
 
 /// Starts the REST API server for this microservice
-pub async fn rest_server(grpc_clients: GrpcClients, mavlink_cache: RedisPool) {
+#[cfg(not(tarpaulin_include))]
+pub async fn rest_server(
+    grpc_clients: GrpcClients,
+    mavlink_cache: RedisPool,
+    adsb_cache: RedisPool,
+) {
     let rest_port = std::env::var("DOCKER_PORT_REST")
         .unwrap_or_else(|_| "8000".to_string())
         .parse::<u16>()
@@ -155,7 +165,9 @@ pub async fn rest_server(grpc_clients: GrpcClients, mavlink_cache: RedisPool) {
             "/telemetry/mavlink/adsb",
             routing::post(rest_api::mavlink_adsb),
         )
+        .route("/telemetry/aircraft/adsb", routing::post(rest_api::adsb))
         .layer(Extension(mavlink_cache))
+        .layer(Extension(adsb_cache))
         .layer(Extension(grpc_clients));
 
     let address = format!("[::]:{rest_port}").parse().unwrap();
@@ -178,6 +190,7 @@ fn generate_openapi_spec(target: &str) -> Result<(), Box<dyn std::error::Error>>
     Ok(())
 }
 
+#[cfg(not(tarpaulin_include))]
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Allow option to only generate the spec file to a given location
@@ -199,7 +212,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Start REST API
     rest_server(
         GrpcClients::default(),
+        // Mavlink cache
         RedisPool::new(CACHE_EXPIRE_MS_MAVLINK_ADSB)
+            .await
+            .expect("Could not start redis server."),
+        // Standard aircraft ADS-B cache
+        RedisPool::new(CACHE_EXPIRE_MS_AIRCRAFT_ADSB)
             .await
             .expect("Could not start redis server."),
     )
