@@ -7,7 +7,7 @@ keywords    = ["vtol", "server", "telemetry"]                              # max
 license     = "BUSL-1.1"
 name        = "svc-telemetry"
 repository  = "https://github.com/Arrow-air/svc-telemetry"
-version     = "0.2.0-develop.2"
+version     = "0.0.1-develop.6"
 
 categories = [
   "aerospace::drones",
