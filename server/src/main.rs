@@ -161,6 +161,7 @@ pub async fn rest_server(
 
     let app = Router::new()
         .fallback(not_found.into_service())
+        .route("/health", routing::get(rest_api::health_check))
         .route(
             "/telemetry/mavlink/adsb",
             routing::post(rest_api::mavlink_adsb),
