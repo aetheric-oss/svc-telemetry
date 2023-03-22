@@ -6,12 +6,13 @@ const ENV_HOST: &str = "REDIS_HOST";
 const ENV_PORT: &str = "REDIS_PORT";
 
 #[derive(Clone)]
+#[allow(missing_debug_implementations)]
 pub struct RedisPool {
-    pool: Pool,
+    pool: Pool, // doesn't implement Debug
     expiration_ms: u32,
 }
 
-#[derive(Debug, Snafu)]
+#[derive(Debug, Clone, Copy, Snafu)]
 pub enum CacheError {
     #[snafu(display("Could not build configuration for cache."))]
     CouldNotConfigure,

@@ -2,6 +2,7 @@ pub use mavlink::{MavFrame, MavHeader, MavlinkVersion, Message};
 pub use mavlink::common::{MavMessage, ADSB_VEHICLE_DATA};
 pub use adsb_deku::{Frame, DF};
 
+/// A trait for getting a hashed key from a bit-packed frame
 pub trait Keys {
     /// Often the aircraft ID
     fn primary_key(&self) -> u32;
@@ -9,6 +10,7 @@ pub trait Keys {
     /// The sequence number, timestamp, or checksum
     fn secondary_key(&self) -> u32;
 
+    /// A key combining the primary and secondary keys
     fn hashed_key(&self) -> u32 {
         let p = self.primary_key();
 
@@ -29,7 +31,7 @@ impl Keys for MavHeader
     }
 }
 
-impl Keys for adsb_deku::Frame
+impl Keys for Frame
 {
     fn primary_key(&self) -> u32 {
         let bytes: [u8; 4] = match &self.df {
