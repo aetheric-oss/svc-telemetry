@@ -3,6 +3,9 @@
 //! </center>
 //! <div align="center">
 //!     <a href="https://github.com/Arrow-air/svc-telemetry/releases">
+//!         <img src="https://img.shields.io/github/v/release/Arrow-air/svc-telemetry?sort=semver&color=green" alt="GitHub stable release (latest by date)">
+//!     </a>
+//!     <a href="https://github.com/Arrow-air/svc-telemetry/releases">
 //!         <img src="https://img.shields.io/github/v/release/Arrow-air/svc-telemetry?include_prereleases" alt="GitHub release (latest by date including pre-releases)">
 //!     </a>
 //!     <a href="https://github.com/Arrow-air/svc-telemetry/tree/main">
@@ -38,7 +41,7 @@ use clap::Parser;
 use grpc::svc_telemetry_rpc_server::{SvcTelemetryRpc, SvcTelemetryRpcServer};
 use grpc::{QueryIsReady, ReadyResponse};
 use grpc_clients::GrpcClients;
-use log::{error, info, warn};
+use log::{debug, error, info, warn};
 use tonic::{transport::Server, Request, Response, Status};
 use utoipa::OpenApi;
 
@@ -72,7 +75,7 @@ pub struct SvcTelemetryImpl {}
 
 #[tonic::async_trait]
 impl SvcTelemetryRpc for SvcTelemetryImpl {
-    /// Returns ready:true when service is available
+    /// Returns true when service is available
     #[cfg(not(tarpaulin_include))]
     async fn is_ready(
         &self,
@@ -84,8 +87,6 @@ impl SvcTelemetryRpc for SvcTelemetryImpl {
 }
 
 /// Responds a NOT_FOUND status and error string
-///
-/// # Arguments
 ///
 /// # Examples
 ///
@@ -102,8 +103,6 @@ async fn not_found(uri: axum::http::Uri) -> impl IntoResponse {
 
 /// Tokio signal handler that will wait for a user to press CTRL+C.
 /// We use this in our hyper `Server` method `with_graceful_shutdown`.
-///
-/// # Arguments
 ///
 /// # Examples
 ///
@@ -123,14 +122,21 @@ async fn shutdown_signal(server: &str) {
 
 /// Starts the grpc server for this microservice
 #[cfg(not(tarpaulin_include))]
-async fn grpc_server() {
+async fn grpc_server() -> Result<(), ()> {
+    debug!("(grpc_server) entry");
+
     // GRPC Server
     let grpc_port = std::env::var("DOCKER_PORT_GRPC")
         .unwrap_or_else(|_| "50051".to_string())
         .parse::<u16>()
         .unwrap_or(50051);
 
-    let full_grpc_addr = format!("[::]:{}", grpc_port).parse().unwrap();
+    let addr = format!("[::]:{}", grpc_port);
+    let Ok(full_grpc_addr) = addr.parse() else {
+        error!("(grpc_server) invalid address: {:?}, exiting", addr);
+        return Err(());
+    };
+
     let imp = SvcTelemetryImpl::default();
     let (mut health_reporter, health_service) = tonic_health::server::health_reporter();
     health_reporter
@@ -139,12 +145,13 @@ async fn grpc_server() {
 
     //start server
     info!("(grpc) hosted at {}", full_grpc_addr);
-    Server::builder()
+    let _ = Server::builder()
         .add_service(health_service)
         .add_service(SvcTelemetryRpcServer::new(imp))
         .serve(full_grpc_addr)
-        .await
-        .unwrap();
+        .await;
+
+    Ok(())
 }
 
 /// Starts the REST API server for this microservice
@@ -153,7 +160,9 @@ pub async fn rest_server(
     grpc_clients: GrpcClients,
     mavlink_cache: RedisPool,
     adsb_cache: RedisPool,
-) {
+) -> Result<(), ()> {
+    debug!("(rest_server) entry");
+
     let rest_port = std::env::var("DOCKER_PORT_REST")
         .unwrap_or_else(|_| "8000".to_string())
         .parse::<u16>()
@@ -171,13 +180,19 @@ pub async fn rest_server(
         .layer(Extension(adsb_cache))
         .layer(Extension(grpc_clients));
 
-    let address = format!("[::]:{rest_port}").parse().unwrap();
-    info!("(rest) hosted at {:?}", address);
-    axum::Server::bind(&address)
+    let address = format!("[::]:{rest_port}");
+    let Ok(address) = address.parse() else {
+        error!("(rest_server) invalid address: {:?}, exiting", address);
+        return Err(());
+    };
+
+    info!("(rest_server) hosted at {:?}", address);
+    let _ = axum::Server::bind(&address)
         .serve(app.into_make_service())
         .with_graceful_shutdown(shutdown_signal("rest"))
-        .await
-        .unwrap();
+        .await;
+
+    Ok(())
 }
 
 /// Create OpenAPI3 Specification File
@@ -211,7 +226,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     tokio::spawn(grpc_server());
 
     // Start REST API
-    rest_server(
+    let _ = rest_server(
         GrpcClients::default(),
         // Mavlink cache
         RedisPool::new(CACHE_EXPIRE_MS_MAVLINK_ADSB)
