@@ -190,7 +190,12 @@ async fn process_adsb(
         return Err(ProcessError::CouldNotParse);
     };
 
-    let frame = adsb_deku::Frame::from_bytes((&payload, 0)).unwrap().1;
+    let Ok(frame) = adsb_deku::Frame::from_bytes((&payload, 0)) else {
+        req_debug!("(process_adsb) could not parse ads-b message.");
+        return Err(ProcessError::CouldNotParse);
+    };
+
+    let frame = frame.1;
     let adsb_deku::DF::ADSB(_) = &frame.df else {
         req_debug!("(process_adsb) received a non-ADSB format message.");
         return Err(ProcessError::CouldNotParse);
@@ -223,6 +228,7 @@ async fn process_adsb(
         (status = 200, description = "Telemetry received."),
         (status = 400, description = "Malformed packet."),
         (status = 500, description = "Something went wrong."),
+        (status = 503, description = "Dependencies of svc-telemetry were down."),
     )
 )]
 pub async fn adsb(

@@ -80,8 +80,7 @@ impl RedisPool {
     /// If the key didn't exist, inserts the key with an expiration time.
     /// If the key exists, increments the key and doesn't extend the expiration time.
     ///
-    /// # Returns
-    /// The order in which this specific key was received (1 for first time).
+    /// Returns the order in which this specific key was received (1 for first time).
     pub async fn try_key(&mut self, key: u32) -> Result<i64, CacheError> {
         cache_debug!("(try_key) entry with key {}", key);
 

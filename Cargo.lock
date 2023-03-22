@@ -1822,7 +1822,7 @@ dependencies = [
 
 [[package]]
 name = "svc-telemetry-client-rest"
-version = "0.0.1-develop.8"
+version = "0.0.1-develop.6"
 dependencies = [
  "adsb_deku",
  "chrono",

@@ -2,10 +2,11 @@
 
 # `svc-telemetry`
 
+![GitHub stable release (latest by date)](https://img.shields.io/github/v/release/Arrow-air/svc-telemetry?sort=semver&color=green)
 ![GitHub release (latest by date including pre-releases)](https://img.shields.io/github/v/release/Arrow-air/svc-telemetry?include_prereleases)
 ![Sanity Checks](https://github.com/arrow-air/svc-telemetry/actions/workflows/sanity_checks.yml/badge.svg?branch=develop)
 ![Rust Checks](https://github.com/arrow-air/svc-telemetry/actions/workflows/rust_ci.yml/badge.svg?branch=develop)
-![Python Flake8](https://github.com/arrow-air/svc-telemetry/actions/workflows/python_ci.yml/badge.svg?branch=develop)
+![Python PEP8](https://github.com/arrow-air/svc-telemetry/actions/workflows/python_ci.yml/badge.svg?branch=develop)
 ![Arrow DAO
 Discord](https://img.shields.io/discord/853833144037277726?style=plastic)
 
@@ -97,10 +98,11 @@ The following documents are relevant to this service:
 - [Concept of Operations](./docs/conops.md)
 - [Software Design Document](./docs/sdd.md)
 - [Interface Control Document (ICD)](./docs/icd.md)
+- [Requirements](https://nocodb.arrowair.com/dashboard/#/nc/view/d1bb0a51-e22f-4b91-b1c5-66f11f4f861b)
 
 ## :busts_in_silhouette: Arrow DAO
 Learn more about us:
-- [Website](https://www.arrowair.com/)
+- [Arrow DAO Website](https://www.arrowair.com/)
 - [Arrow Docs](https://www.arrowair.com/docs/intro)
 - [Discord](https://discord.com/invite/arrow)
 
