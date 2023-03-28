@@ -1778,7 +1778,7 @@ dependencies = [
 
 [[package]]
 name = "svc-telemetry"
-version = "0.0.1-develop.7"
+version = "0.0.1-develop.8"
 dependencies = [
  "adsb_deku",
  "axum 0.5.17",
@@ -1812,7 +1812,7 @@ dependencies = [
 
 [[package]]
 name = "svc-telemetry-client-grpc"
-version = "0.0.1-develop.7"
+version = "0.0.1-develop.8"
 dependencies = [
  "prost",
  "prost-types",

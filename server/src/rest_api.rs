@@ -35,11 +35,11 @@ macro_rules! req_error {
 }
 
 /// Writes a debug! message to the app::req logger
-macro_rules! req_debug {
-    ($($arg:tt)+) => {
-        log::debug!(target: "app::req", $($arg)+);
-    };
-}
+// macro_rules! req_debug {
+//     ($($arg:tt)+) => {
+//         log::debug!(target: "app::req", $($arg)+);
+//     };
+// }
 
 #[derive(Debug, Snafu)]
 enum ProcessError {
@@ -56,7 +56,7 @@ async fn process_mavlink(
     payload: &[u8],
     mut cache: RedisPool,
 ) -> Result<(MavFrame<MavMessage>, i64), ProcessError> {
-    req_debug!("(process_mavlink) entry");
+    req_info!("(process_mavlink) entry.");
 
     let Ok(frame) = MavFrame::<MavMessage>::deser(MavlinkVersion::V2, payload) else {
         return Err(ProcessError::CouldNotParse);
@@ -67,7 +67,7 @@ async fn process_mavlink(
     // Set the key
     let result = cache.try_key(key).await;
     let Ok(count) = result else {
-        req_error!("{}", result.unwrap_err());
+        req_error!("(process_mavlink) {}.", result.unwrap_err());
         return Err(ProcessError::CouldNotWriteCache);
     };
 
@@ -87,14 +87,14 @@ async fn process_mavlink(
 pub async fn health_check(
     Extension(mut grpc_clients): Extension<GrpcClients>,
 ) -> Result<(), StatusCode> {
-    req_debug!("(health_check) entry.");
+    req_info!("(health_check) entry.");
 
     let mut ok = true;
 
     let result = grpc_clients.adsb.get_client().await;
     if result.is_none() {
         let error_msg = "svc-storage unavailable.".to_string();
-        req_error!("(health_check) {}", &error_msg);
+        req_error!("(health_check) {}.", &error_msg);
         ok = false;
     };
 
@@ -129,7 +129,7 @@ pub async fn mavlink_adsb(
     Extension(mut _grpc_clients): Extension<GrpcClients>,
     payload: Bytes,
 ) -> Result<Json<i64>, StatusCode> {
-    req_debug!("(mavlink_adsb) entry");
+    req_info!("(mavlink_adsb) entry.");
 
     let result = process_mavlink(&payload, mavlink_cache).await;
     let Ok((_frame, count)) = result else {
@@ -145,19 +145,19 @@ pub async fn mavlink_adsb(
 
     match count.cmp(&1) {
         Ordering::Less => {
-            req_debug!(
+            req_error!(
                 "(mavlink_adsb) ADS-B report count should be impossible: {}.",
                 count
             );
             return Err(StatusCode::INTERNAL_SERVER_ERROR);
         }
         Ordering::Equal => {
-            req_debug!("(mavlink_adsb) first time this ADS-B packet was received.");
+            req_info!("(mavlink_adsb) first time this ADS-B packet was received.");
             // write raw packet to svc-storage
         }
         _ => {
-            req_debug!(
-                "(mavlink_adsb) confirmations received for this ADS-B packet: {}",
+            req_info!(
+                "(mavlink_adsb) confirmations received for this ADS-B packet: {}.",
                 count
             );
             // increment confirmations to svc-storage?
@@ -166,7 +166,7 @@ pub async fn mavlink_adsb(
 
     // Push to svc-storage
     // Push to third-party
-    req_debug!("(mavlink_adsb) success");
+    req_info!("(mavlink_adsb) success");
     Ok(Json(count))
 }
 
@@ -183,21 +183,21 @@ async fn process_adsb(
     payload: &[u8],
     mut cache: RedisPool,
 ) -> Result<(i64, i64, i64), ProcessError> {
-    req_debug!("(process_adsb) entry");
+    req_info!("(process_adsb) entry.");
 
     let Ok(payload) = <[u8; ADSB_SIZE_BYTES]>::try_from(payload) else {
-        req_debug!("(process_adsb) received ads-b message not {ADSB_SIZE_BYTES} bytes.");
+        req_info!("(process_adsb) received ads-b message not {ADSB_SIZE_BYTES} bytes.");
         return Err(ProcessError::CouldNotParse);
     };
 
     let Ok(frame) = adsb_deku::Frame::from_bytes((&payload, 0)) else {
-        req_debug!("(process_adsb) could not parse ads-b message.");
+        req_info!("(process_adsb) could not parse ads-b message.");
         return Err(ProcessError::CouldNotParse);
     };
 
     let frame = frame.1;
     let adsb_deku::DF::ADSB(_) = &frame.df else {
-        req_debug!("(process_adsb) received a non-ADSB format message.");
+        req_info!("(process_adsb) received a non-ADSB format message.");
         return Err(ProcessError::CouldNotParse);
     };
 
@@ -206,7 +206,7 @@ async fn process_adsb(
     // Set the key
     let result = cache.try_key(key).await;
     let Ok(count) = result else {
-        req_error!("{}", result.unwrap_err());
+        req_error!("(process_adsb) {}", result.unwrap_err());
         return Err(ProcessError::CouldNotWriteCache);
     };
 
@@ -237,7 +237,7 @@ pub async fn adsb(
     Extension(mut grpc_clients): Extension<GrpcClients>,
     payload: Bytes,
 ) -> Result<Json<i64>, StatusCode> {
-    req_debug!("(adsb) entry");
+    req_info!("(adsb) entry.");
 
     let result = process_adsb(&payload, adsb_cache).await;
     let Ok((icao_address, message_type, count)) = result else {
@@ -253,15 +253,15 @@ pub async fn adsb(
 
     match count.cmp(&1) {
         Ordering::Less => {
-            req_debug!("(adsb) ADS-B report count should be impossible: {}.", count);
+            req_info!("(adsb) ADS-B report count should be impossible: {}.", count);
             return Err(StatusCode::INTERNAL_SERVER_ERROR);
         }
         Ordering::Equal => {
             // continue
         }
         _ => {
-            req_debug!(
-                "(adsb) confirmations received for this ADS-B packet: {}",
+            req_info!(
+                "(adsb) confirmations received for this ADS-B packet: {}.",
                 count
             );
 
@@ -271,7 +271,7 @@ pub async fn adsb(
         }
     };
 
-    req_debug!("(adsb) first time this ADS-B packet was received.");
+    req_info!("(adsb) first time this ADS-B packet was received.");
 
     let current_time = prost_types::Timestamp::from(SystemTime::now());
     let data = adsb::Data {
@@ -284,17 +284,17 @@ pub async fn adsb(
     // Make request
     let request = tonic::Request::new(data);
     let Some(mut client) = grpc_clients.adsb.get_client().await else {
-        req_error!("(adsb) could not get svc-storage client");
+        req_error!("(adsb) could not get svc-storage client.");
         grpc_clients.adsb.invalidate().await;
         return Err(StatusCode::SERVICE_UNAVAILABLE);
     };
     let response = client.insert(request).await;
     if response.is_err() {
-        req_error!("(adsb) telemetry push to svc-storage failed");
+        req_error!("(adsb) telemetry push to svc-storage failed.");
         return Err(StatusCode::INTERNAL_SERVER_ERROR);
     }
 
-    req_debug!("(adsb) success");
+    req_info!("(adsb) success.");
     Ok(Json(count))
 }
 

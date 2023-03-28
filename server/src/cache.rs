@@ -44,9 +44,16 @@ macro_rules! cache_debug {
     };
 }
 
+/// Writes a info! message to the app::cache logger
+macro_rules! cache_info {
+    ($($arg:tt)+) => {
+        log::info!(target: "app::cache", $($arg)+);
+    };
+}
+
 impl RedisPool {
     pub async fn new(expiration_ms: u32) -> Result<Self, CacheError> {
-        cache_debug!("(new) entry");
+        cache_info!("(new) entry");
         let Ok(port) = std::env::var(ENV_PORT) else {
             cache_error!("(env) {} undefined.", ENV_PORT);
             return Err(CacheError::UndefinedPort);
@@ -82,7 +89,7 @@ impl RedisPool {
     ///
     /// Returns the order in which this specific key was received (1 for first time).
     pub async fn try_key(&mut self, key: u32) -> Result<i64, CacheError> {
-        cache_debug!("(try_key) entry with key {}", key);
+        cache_info!("(try_key) entry with key {}.", key);
 
         let Ok(mut connection) = self.pool.get().await else {
             cache_error!("(try_key) could not connect to redis deadpool.");

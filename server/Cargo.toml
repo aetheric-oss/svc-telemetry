@@ -1,18 +1,15 @@
 [package]
-authors     = ["A.M. Smith <amsmith@arrowair.com>"]
 description = "Telemetry Service GRPC and REST servers"
-edition     = "2021"                                                       # Allowed values are 2015, 2018, 2021
-homepage    = "https://www.arrowair.com/docs/documentation/services/intro"
-keywords    = ["vtol", "server", "telemetry"]                              # max 5
-license     = "BUSL-1.1"
 name        = "svc-telemetry"
-repository  = "https://github.com/Arrow-air/svc-telemetry"
-version     = "0.0.1-develop.7"
+version     = "0.0.1-develop.8"
 
-categories = [
-  "aerospace::drones",
-  "aerospace::protocols",
-] # max 5 -- https://crates.io/category_slugs
+authors.workspace      = true
+categories.workspace   = true
+edition.workspace      = true
+homepage.workspace     = true
+keywords.workspace     = true
+license-file.workspace = true
+repository.workspace   = true
 
 [features]
 vendored-openssl = ['openssl/vendored']

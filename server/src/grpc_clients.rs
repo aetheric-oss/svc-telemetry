@@ -40,7 +40,7 @@ pub struct GrpcClient<T> {
 /// Returns a string in http://host:port format from provided
 /// environment variables
 fn get_grpc_endpoint(env_host: &str, env_port: &str) -> String {
-    grpc_debug!("(get_grpc_endpoint) entry");
+    grpc_debug!("(get_grpc_endpoint) entry.");
     let port = match std::env::var(env_port) {
         Ok(s) => s,
         Err(_) => {
@@ -79,7 +79,7 @@ macro_rules! grpc_client {
     ( $client: ident, $name: expr ) => {
         impl GrpcClient<$client<Channel>> {
             pub async fn get_client(&mut self) -> Option<$client<Channel>> {
-                grpc_debug!("(get_client) storage::{} entry", $name);
+                grpc_debug!("(get_client) storage::{} entry.", $name);
 
                 let arc = Arc::clone(&self.inner);
 
@@ -90,7 +90,7 @@ macro_rules! grpc_client {
                 }
 
                 grpc_debug!(
-                    "(grpc) connecting to {} server at {}",
+                    "(grpc) connecting to {} server at {}.",
                     $name,
                     self.address.clone()
                 );
@@ -98,7 +98,7 @@ macro_rules! grpc_client {
                 match result {
                     Ok(client) => {
                         grpc_info!(
-                            "(grpc) success: connected to {} server at {}",
+                            "(grpc) success: connected to {} server at {}.",
                             $name,
                             self.address.clone()
                         );
@@ -106,7 +106,7 @@ macro_rules! grpc_client {
                     }
                     Err(e) => {
                         grpc_error!(
-                            "(grpc) couldn't connect to {} server at {}; {}",
+                            "(grpc) couldn't connect to {} server at {}; {}.",
                             $name,
                             self.address,
                             e
