@@ -1,9 +1,7 @@
-use deadpool_redis::{redis, Config, Pool, Runtime};
+use deadpool_redis::{redis, Pool, Runtime};
 use snafu::prelude::Snafu;
 
 const REDIS_POOL_SIZE: usize = 100;
-const ENV_HOST: &str = "REDIS_HOST";
-const ENV_PORT: &str = "REDIS_PORT";
 
 #[derive(Clone)]
 #[allow(missing_debug_implementations)]
@@ -22,49 +20,18 @@ pub enum CacheError {
 
     #[snafu(display("The operation on the redis cache failed."))]
     OperationFailed,
-
-    #[snafu(display("The {ENV_HOST} env variable was not set."))]
-    UndefinedHost,
-
-    #[snafu(display("The {ENV_PORT} env variable was not set."))]
-    UndefinedPort,
-}
-
-/// Writes an error! message to the app::cache logger
-macro_rules! cache_error {
-    ($($arg:tt)+) => {
-        log::error!(target: "app::cache", $($arg)+);
-    };
-}
-
-/// Writes a debug! message to the app::cache logger
-macro_rules! cache_debug {
-    ($($arg:tt)+) => {
-        log::debug!(target: "app::cache", $($arg)+);
-    };
-}
-
-/// Writes a info! message to the app::cache logger
-macro_rules! cache_info {
-    ($($arg:tt)+) => {
-        log::info!(target: "app::cache", $($arg)+);
-    };
 }
 
 impl RedisPool {
-    pub async fn new(expiration_ms: u32) -> Result<Self, CacheError> {
-        cache_info!("(new) entry");
-        let Ok(port) = std::env::var(ENV_PORT) else {
-            cache_error!("(env) {} undefined.", ENV_PORT);
-            return Err(CacheError::UndefinedPort);
-        };
+    pub async fn new(
+        config: crate::config::Config,
+        expiration_ms: u32,
+    ) -> Result<Self, CacheError> {
+        cache_info!("(RedisPool new) entry.");
+        let port = config.docker_port_redis;
+        let host = config.docker_host_redis;
 
-        let Ok(host) = std::env::var(ENV_HOST) else {
-            cache_error!("(env) {} undefined.", ENV_HOST);
-            return Err(CacheError::UndefinedHost);
-        };
-
-        let cfg = Config::from_url(format!("redis://{host}:{port}"));
+        let cfg = deadpool_redis::Config::from_url(format!("redis://{host}:{port}"));
 
         let Ok(builder) = cfg.builder() else {
             return Err(CacheError::CouldNotConfigure);

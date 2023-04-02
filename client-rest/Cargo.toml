@@ -1,14 +1,15 @@
 [package]
+description = "Types used for REST communication with the telemetry service."
+name        = "svc-telemetry-client-rest"
+version     = "0.0.1-develop.6"
+
 authors.workspace      = true
 categories.workspace   = true
-description            = "Types used for REST communication with the telemetry service."
 edition.workspace      = true
 homepage.workspace     = true
 keywords.workspace     = true
 license-file.workspace = true
-name                   = "svc-telemetry-client-rest"
 repository.workspace   = true
-version                = "0.0.1-develop.6"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 

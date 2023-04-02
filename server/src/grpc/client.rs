@@ -1,29 +1,10 @@
+//! gRPC client helpers implementation
+//!
 pub use svc_storage_client_grpc::adsb::rpc_service_client::RpcServiceClient as AdsbClient;
 
 use futures::lock::Mutex;
 use std::sync::Arc;
 pub use tonic::transport::Channel;
-
-/// Writes an info! message to the app::grpc logger
-macro_rules! grpc_info {
-    ($($arg:tt)+) => {
-        log::info!(target: "app::grpc", $($arg)+);
-    };
-}
-
-/// Writes an error! message to the app::grpc logger
-macro_rules! grpc_error {
-    ($($arg:tt)+) => {
-        log::error!(target: "app::grpc", $($arg)+);
-    };
-}
-
-/// Writes a debug! message to the app::grpc logger
-macro_rules! grpc_debug {
-    ($($arg:tt)+) => {
-        log::debug!(target: "app::grpc", $($arg)+);
-    };
-}
 
 #[derive(Clone, Debug)]
 pub struct GrpcClients {
@@ -40,7 +21,7 @@ pub struct GrpcClient<T> {
 /// Returns a string in http://host:port format from provided
 /// environment variables
 fn get_grpc_endpoint(env_host: &str, env_port: &str) -> String {
-    grpc_debug!("(get_grpc_endpoint) entry.");
+    grpc_info!("(get_grpc_endpoint) entry.");
     let port = match std::env::var(env_port) {
         Ok(s) => s,
         Err(_) => {
@@ -79,7 +60,7 @@ macro_rules! grpc_client {
     ( $client: ident, $name: expr ) => {
         impl GrpcClient<$client<Channel>> {
             pub async fn get_client(&mut self) -> Option<$client<Channel>> {
-                grpc_debug!("(get_client) storage::{} entry.", $name);
+                grpc_info!("(get_client) storage::{} entry.", $name);
 
                 let arc = Arc::clone(&self.inner);
 
@@ -89,7 +70,7 @@ macro_rules! grpc_client {
                     return client.clone();
                 }
 
-                grpc_debug!(
+                grpc_info!(
                     "(grpc) connecting to {} server at {}.",
                     $name,
                     self.address.clone()

@@ -1,7 +1,8 @@
 //! REST API implementations for svc-telemetry
 
-use crate::cache::RedisPool;
-use crate::grpc_clients::GrpcClients;
+use crate::cache::pool::RedisPool;
+use crate::grpc::client::GrpcClients;
+
 use adsb_deku::deku::DekuContainerRead;
 use axum::{body::Bytes, extract::Extension, Json};
 use hyper::StatusCode;
@@ -12,34 +13,13 @@ use svc_storage_client_grpc::adsb;
 
 /// Types Used in REST Messages
 pub mod rest_types {
-    include!("../../openapi/types.rs");
+    include!("../../../openapi/types.rs");
 }
 
 pub use mavlink::{common::MavMessage, MavFrame, MavlinkVersion, Message};
 pub use rest_types::Keys;
 
 const ADSB_SIZE_BYTES: usize = 14;
-
-// /// Writes an info! message to the app::req logger
-macro_rules! req_info {
-    ($($arg:tt)+) => {
-        log::info!(target: "app::req", $($arg)+);
-    };
-}
-
-// /// Writes an error! message to the app::req logger
-macro_rules! req_error {
-    ($($arg:tt)+) => {
-        log::error!(target: "app::req", $($arg)+);
-    };
-}
-
-/// Writes a debug! message to the app::req logger
-// macro_rules! req_debug {
-//     ($($arg:tt)+) => {
-//         log::debug!(target: "app::req", $($arg)+);
-//     };
-// }
 
 #[derive(Debug, Snafu)]
 enum ProcessError {
@@ -56,7 +36,7 @@ async fn process_mavlink(
     payload: &[u8],
     mut cache: RedisPool,
 ) -> Result<(MavFrame<MavMessage>, i64), ProcessError> {
-    req_info!("(process_mavlink) entry.");
+    rest_info!("(process_mavlink) entry.");
 
     let Ok(frame) = MavFrame::<MavMessage>::deser(MavlinkVersion::V2, payload) else {
         return Err(ProcessError::CouldNotParse);
@@ -67,7 +47,7 @@ async fn process_mavlink(
     // Set the key
     let result = cache.try_key(key).await;
     let Ok(count) = result else {
-        req_error!("(process_mavlink) {}.", result.unwrap_err());
+        rest_error!("(process_mavlink) {}.", result.unwrap_err());
         return Err(ProcessError::CouldNotWriteCache);
     };
 
@@ -87,24 +67,24 @@ async fn process_mavlink(
 pub async fn health_check(
     Extension(mut grpc_clients): Extension<GrpcClients>,
 ) -> Result<(), StatusCode> {
-    req_info!("(health_check) entry.");
+    rest_info!("(health_check) entry.");
 
     let mut ok = true;
 
     let result = grpc_clients.adsb.get_client().await;
     if result.is_none() {
         let error_msg = "svc-storage unavailable.".to_string();
-        req_error!("(health_check) {}.", &error_msg);
+        rest_error!("(health_check) {}.", &error_msg);
         ok = false;
     };
 
     match ok {
         true => {
-            req_info!("(health_check) healthy, all dependencies running.");
+            rest_info!("(health_check) healthy, all dependencies running.");
             Ok(())
         }
         false => {
-            req_error!("(health_check) unhealthy, 1+ dependencies down.");
+            rest_error!("(health_check) unhealthy, 1+ dependencies down.");
             Err(StatusCode::SERVICE_UNAVAILABLE)
         }
     }
@@ -129,7 +109,7 @@ pub async fn mavlink_adsb(
     Extension(mut _grpc_clients): Extension<GrpcClients>,
     payload: Bytes,
 ) -> Result<Json<i64>, StatusCode> {
-    req_info!("(mavlink_adsb) entry.");
+    rest_info!("(mavlink_adsb) entry.");
 
     let result = process_mavlink(&payload, mavlink_cache).await;
     let Ok((_frame, count)) = result else {
@@ -145,18 +125,18 @@ pub async fn mavlink_adsb(
 
     match count.cmp(&1) {
         Ordering::Less => {
-            req_error!(
+            rest_error!(
                 "(mavlink_adsb) ADS-B report count should be impossible: {}.",
                 count
             );
             return Err(StatusCode::INTERNAL_SERVER_ERROR);
         }
         Ordering::Equal => {
-            req_info!("(mavlink_adsb) first time this ADS-B packet was received.");
+            rest_info!("(mavlink_adsb) first time this ADS-B packet was received.");
             // write raw packet to svc-storage
         }
         _ => {
-            req_info!(
+            rest_info!(
                 "(mavlink_adsb) confirmations received for this ADS-B packet: {}.",
                 count
             );
@@ -166,7 +146,7 @@ pub async fn mavlink_adsb(
 
     // Push to svc-storage
     // Push to third-party
-    req_info!("(mavlink_adsb) success");
+    rest_info!("(mavlink_adsb) success");
     Ok(Json(count))
 }
 
@@ -183,21 +163,21 @@ async fn process_adsb(
     payload: &[u8],
     mut cache: RedisPool,
 ) -> Result<(i64, i64, i64), ProcessError> {
-    req_info!("(process_adsb) entry.");
+    rest_info!("(process_adsb) entry.");
 
     let Ok(payload) = <[u8; ADSB_SIZE_BYTES]>::try_from(payload) else {
-        req_info!("(process_adsb) received ads-b message not {ADSB_SIZE_BYTES} bytes.");
+        rest_info!("(process_adsb) received ads-b message not {ADSB_SIZE_BYTES} bytes.");
         return Err(ProcessError::CouldNotParse);
     };
 
     let Ok(frame) = adsb_deku::Frame::from_bytes((&payload, 0)) else {
-        req_info!("(process_adsb) could not parse ads-b message.");
+        rest_info!("(process_adsb) could not parse ads-b message.");
         return Err(ProcessError::CouldNotParse);
     };
 
     let frame = frame.1;
     let adsb_deku::DF::ADSB(_) = &frame.df else {
-        req_info!("(process_adsb) received a non-ADSB format message.");
+        rest_info!("(process_adsb) received a non-ADSB format message.");
         return Err(ProcessError::CouldNotParse);
     };
 
@@ -206,7 +186,7 @@ async fn process_adsb(
     // Set the key
     let result = cache.try_key(key).await;
     let Ok(count) = result else {
-        req_error!("(process_adsb) {}", result.unwrap_err());
+        rest_error!("(process_adsb) {}", result.unwrap_err());
         return Err(ProcessError::CouldNotWriteCache);
     };
 
@@ -237,7 +217,7 @@ pub async fn adsb(
     Extension(mut grpc_clients): Extension<GrpcClients>,
     payload: Bytes,
 ) -> Result<Json<i64>, StatusCode> {
-    req_info!("(adsb) entry.");
+    rest_info!("(adsb) entry.");
 
     let result = process_adsb(&payload, adsb_cache).await;
     let Ok((icao_address, message_type, count)) = result else {
@@ -253,14 +233,14 @@ pub async fn adsb(
 
     match count.cmp(&1) {
         Ordering::Less => {
-            req_info!("(adsb) ADS-B report count should be impossible: {}.", count);
+            rest_info!("(adsb) ADS-B report count should be impossible: {}.", count);
             return Err(StatusCode::INTERNAL_SERVER_ERROR);
         }
         Ordering::Equal => {
             // continue
         }
         _ => {
-            req_info!(
+            rest_info!(
                 "(adsb) confirmations received for this ADS-B packet: {}.",
                 count
             );
@@ -271,7 +251,7 @@ pub async fn adsb(
         }
     };
 
-    req_info!("(adsb) first time this ADS-B packet was received.");
+    rest_info!("(adsb) first time this ADS-B packet was received.");
 
     let current_time = prost_types::Timestamp::from(SystemTime::now());
     let data = adsb::Data {
@@ -284,17 +264,17 @@ pub async fn adsb(
     // Make request
     let request = tonic::Request::new(data);
     let Some(mut client) = grpc_clients.adsb.get_client().await else {
-        req_error!("(adsb) could not get svc-storage client.");
+        rest_error!("(adsb) could not get svc-storage client.");
         grpc_clients.adsb.invalidate().await;
         return Err(StatusCode::SERVICE_UNAVAILABLE);
     };
     let response = client.insert(request).await;
     if response.is_err() {
-        req_error!("(adsb) telemetry push to svc-storage failed.");
+        rest_error!("(adsb) telemetry push to svc-storage failed.");
         return Err(StatusCode::INTERNAL_SERVER_ERROR);
     }
 
-    req_info!("(adsb) success.");
+    rest_info!("(adsb) success.");
     Ok(Json(count))
 }
 

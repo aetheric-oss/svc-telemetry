@@ -62,7 +62,7 @@ loggers:
     level: info
     appenders:
       - cache_requests
-  app::req:
+  app::rest:
     level: info
     appenders:
       - rest_requests
