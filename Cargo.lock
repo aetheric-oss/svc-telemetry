@@ -2030,8 +2030,8 @@ checksum = "73473c0e59e6d5812c5dfe2a064a6444949f089e20eec9a2e5506596494e4623"
 
 [[package]]
 name = "svc-storage-client-grpc"
-version = "0.9.0-develop.10"
-source = "git+https://github.com/Arrow-air/svc-storage?tag=v0.9.0-develop.10#1c36777f2163bd8b6b67d1dfb15792c786793215"
+version = "0.10.0"
+source = "git+https://github.com/Arrow-air/svc-storage?tag=v0.10.0#d11eecc5e39623e3a31ed7a50d2a00f90dedeb3d"
 dependencies = [
  "geo-types",
  "num-derive",
