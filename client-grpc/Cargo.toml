@@ -1,17 +1,16 @@
-[package]
-description = "Arrow template service GRPC client"
-edition     = "2021"                                                       # Allowed values are 2015, 2018, 2021
-homepage    = "https://www.arrowair.com/docs/documentation/services/intro"
-keywords    = ["vtol", "client", "template"]                               # max 5
-license     = "BUSL-1.1"
-name        = "svc-template-rust-client-grpc"
-repository  = "https://github.com/Arrow-air/svc-template-rust"
-version     = "0.2.0-develop.2"
 
-categories = [
-  "aerospace::drones",
-  "aerospace::protocols",
-] # max 5 -- https://crates.io/category_slugs
+[package]
+description = "Telemetry Service GRPC client"
+name        = "svc-telemetry-client-grpc"
+version     = "0.0.1-develop.8"
+
+authors.workspace      = true
+categories.workspace   = true
+edition.workspace      = true
+homepage.workspace     = true
+keywords.workspace     = true
+license-file.workspace = true
+repository.workspace   = true
 
 [dependencies]
 prost       = "0.11"

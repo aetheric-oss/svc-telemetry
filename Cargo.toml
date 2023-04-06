@@ -1,2 +1,15 @@
 [workspace]
-members = ["server", "client-grpc"]
+members = ["server", "client-grpc", "client-rest"]
+
+[workspace.package]
+authors = ["A.M. Smith <amsmith@arrowair.com>"]
+categories = [
+  "aerospace::drones",
+  "aerospace::protocols",
+] # max 5 -- https://crates.io/category_slugs
+edition = "2021"
+homepage = "https://www.arrowair.com/docs/documentation/services/intro"
+keywords = ["vtol", "client", "telemetry"] # max 5
+license = "BUSL-1.1"
+license-file = "LICENSE"
+repository = "https://github.com/Arrow-air/svc-telemetry"

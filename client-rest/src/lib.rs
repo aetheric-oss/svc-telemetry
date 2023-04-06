@@ -14,10 +14,9 @@
 //!     <br><br>
 //! </div>
 //!
-//! Exposes svc-telemetry grpc client functions
+//! Types used with svc-telemetry API
 
-/// Client Library: Client Functions, Structs
-pub mod client {
-    #![allow(unused_qualifications)]
-    include!("grpc.rs");
+/// Types for API messages
+pub mod types {
+    include!("../../openapi/types.rs");
 }

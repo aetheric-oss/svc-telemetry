@@ -1,0 +1,36 @@
+[package]
+description = "Types used for REST communication with the telemetry service."
+name        = "svc-telemetry-client-rest"
+version     = "0.0.1-develop.6"
+
+authors.workspace      = true
+categories.workspace   = true
+edition.workspace      = true
+homepage.workspace     = true
+keywords.workspace     = true
+license-file.workspace = true
+repository.workspace   = true
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+adsb_deku     = "0.6"
+chrono        = { version = "0.4", features = ["serde"] }
+mavlink       = "0.10"
+ordered-float = { version = "3.4", features = ["serde"] }
+packed_struct = "0.10"
+serde         = "1.0"
+serde_json    = "1.0"
+utoipa        = { version = "2.2", features = ["axum_extras"] }
+uuid          = { version = "1.2", features = ["serde"] }
+
+[dependencies.svc-storage-client-grpc]
+git = "https://github.com/Arrow-air/svc-storage"
+tag = "v0.10.0"
+
+[[example]]
+name = "rest"
+
+[dev-dependencies]
+hyper = { version = "0.14", features = ["full"] }
+tokio = { version = "1.20", features = ["full"] }
