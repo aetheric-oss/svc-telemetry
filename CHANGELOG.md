@@ -1,3 +1,34 @@
+## [Release 0.1.0](https://github.com/Arrow-air/svc-telemetry/releases/tag/v0.1.0)
+
+### ✨ Features
+
+- add health endpoint ([`f4ebade`](https://github.com/Arrow-air/svc-telemetry/commit/f4ebade4a9ab32c6d4cf169fce8eefaaa7b2e66d))
+
+### 🐛 Fixes
+
+- address peer review ([`13370d1`](https://github.com/Arrow-air/svc-telemetry/commit/13370d1b07d61b0f44f4c75cf6b59d49db1ff8c4))
+-  **rest:** add tag to utoipa paths ([`50021a9`](https://github.com/Arrow-air/svc-telemetry/commit/50021a9c8880ad9bce2e2dceef81941fbc28aa6d))
+
+### 🛠 Maintenance
+
+- terraform provisioned file changes ([`2184cdc`](https://github.com/Arrow-air/svc-telemetry/commit/2184cdce86b1380ce65b4453f8712582a1d7893c))
+- setup directory (#1) ([`213f583`](https://github.com/Arrow-air/svc-telemetry/commit/213f5831a0107abd703d3cd8efb991d264cb7ff0))
+- add rest server ([`9d6a430`](https://github.com/Arrow-air/svc-telemetry/commit/9d6a430eb9fa8a44638d02528d56aba1fc12e971))
+- add mavlink endpoint ([`8cb3507`](https://github.com/Arrow-air/svc-telemetry/commit/8cb35078d6adf7c5b8c7332486adb011d92bf902))
+- update utoipa and use octet streams ([`a6edfb0`](https://github.com/Arrow-air/svc-telemetry/commit/a6edfb085a123139ef320ee08cd448e22b3679da))
+- add adsb endpoint and connection to svc-storage ([`08297c0`](https://github.com/Arrow-air/svc-telemetry/commit/08297c094a2654c05210893186baa6391d8c6aec))
+- update release files ([`1ba958b`](https://github.com/Arrow-air/svc-telemetry/commit/1ba958b7381f5fc5011bd1a28852a5de80ac17f5))
+- edits to match release checklist ([`3892018`](https://github.com/Arrow-air/svc-telemetry/commit/38920189e1a2afa3875f7dc99850015351840e12))
+- additional cleanup ([`c0a3122`](https://github.com/Arrow-air/svc-telemetry/commit/c0a3122158a13cb5d5e56fcb974aaf5ad5ddb033))
+- module refactor ([`af352d3`](https://github.com/Arrow-air/svc-telemetry/commit/af352d3892095663c3be86e0410eb2e7a21cc64b))
+- update storage tag to main ([`0f4d2b0`](https://github.com/Arrow-air/svc-telemetry/commit/0f4d2b06942616bfc605c6c219e6824d3cbd8b66))
+- address reviewer comments ([`1ae030e`](https://github.com/Arrow-air/svc-telemetry/commit/1ae030ec8c5fc5bf790b7d78560d28c78cdbf4af))
+
+### 📚 Documentation
+
+-  **conops:** add conops draft ([`dca1615`](https://github.com/Arrow-air/svc-telemetry/commit/dca16155186eba53aa6fa07f6c83d8ca44f79ecd))
+- add icd and sdd information for mavlink adsb ([`0c7a711`](https://github.com/Arrow-air/svc-telemetry/commit/0c7a711a70df6f5da2b61117888c3e2f3f4d3429))
+
 ## [Release 0.2.0-develop.2](https://github.com/Arrow-air/svc-template-rust/releases/tag/v0.2.0-develop.2)
 
 ### 🛠 Maintenance
