@@ -1,8 +1,6 @@
 use deadpool_redis::{redis, Pool, Runtime};
 use snafu::prelude::Snafu;
 
-const REDIS_POOL_SIZE: usize = 100;
-
 #[derive(Clone)]
 #[allow(missing_debug_implementations)]
 pub struct RedisPool {
@@ -28,27 +26,17 @@ impl RedisPool {
         expiration_ms: u32,
     ) -> Result<Self, CacheError> {
         cache_info!("(RedisPool new) entry.");
-        let port = config.docker_port_redis;
-        let host = config.docker_host_redis;
 
-        let cfg = deadpool_redis::Config::from_url(format!("redis://{host}:{port}"));
-
-        let Ok(builder) = cfg.builder() else {
-            return Err(CacheError::CouldNotConfigure);
-        };
-
-        let Ok(pool) = builder
-            .max_size(REDIS_POOL_SIZE)
-            .runtime(Runtime::Tokio1)
-            .build()
-        else {
-            return Err(CacheError::CouldNotConfigure);
-        };
-
-        Ok(RedisPool {
-            pool,
-            expiration_ms,
-        })
+        match config.redis.create_pool(Some(Runtime::Tokio1)) {
+            Ok(pool) => Ok(RedisPool {
+                pool,
+                expiration_ms,
+            }),
+            Err(e) => {
+                cache_error!("(RedisPool new) could not create pool: {}", e);
+                Err(CacheError::CouldNotConfigure)
+            }
+        }
     }
 
     /// If the key didn't exist, inserts the key with an expiration time.
@@ -63,7 +51,7 @@ impl RedisPool {
             return Err(CacheError::CouldNotConnect);
         };
 
-        let return_values = redis::pipe()
+        let mut result = match redis::pipe()
             .atomic()
             // Return the value of this increment (1 if key didn't exist before)
             .cmd("INCR")
@@ -76,17 +64,38 @@ impl RedisPool {
             // (not implemented in `redis` crate yet: https://redis.io/commands/pexpire/)
             .ignore()
             .query_async::<_, _>(&mut connection)
-            .await;
-
-        let Ok(redis::Value::Bulk(mut return_values)) = return_values else {
-            cache_error!("(try_key) Operation failed.");
-            cache_debug!("(try_key) Operation returned: {:?}", return_values.unwrap_err());
-            return Err(CacheError::OperationFailed);
+            .await
+        {
+            Ok(redis::Value::Bulk(val)) => val,
+            Ok(value) => {
+                cache_error!("(try_key) Operation failed, unexpected redis response.");
+                cache_debug!(
+                    "(try_key) Operation failed, unexpected redis response: {:?}",
+                    value
+                );
+                return Err(CacheError::OperationFailed);
+            }
+            Err(e) => {
+                cache_error!("(try_key) Operation failed, redis error.");
+                cache_debug!("(try_key) Operation failed, redis error: {}", e);
+                return Err(CacheError::OperationFailed);
+            }
         };
 
-        let Some(redis::Value::Int(new_value)) = return_values.pop() else {
-            cache_error!("(try_key) Operation failed, empty redis response array.");
-            return Err(CacheError::OperationFailed);
+        let new_value = match result.pop() {
+            Some(redis::Value::Int(new_value)) => new_value,
+            Some(value) => {
+                cache_info!("(try_key) Operation failed, unexpected redis response.");
+                cache_debug!(
+                    "(try_key) Operation failed, unexpected redis response: {:?}",
+                    value
+                );
+                return Err(CacheError::OperationFailed);
+            }
+            None => {
+                cache_error!("(try_key) Operation failed, empty redis response array.");
+                return Err(CacheError::OperationFailed);
+            }
         };
 
         Ok(new_value)

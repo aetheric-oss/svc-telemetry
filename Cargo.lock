@@ -553,6 +553,7 @@ dependencies = [
  "deadpool-runtime",
  "num_cpus",
  "retain_mut",
+ "serde",
  "tokio",
 ]
 
@@ -564,6 +565,7 @@ checksum = "2b8bde44cbfdf17ae5baa45c9f43073b320f1a19955389315629304a23909ad2"
 dependencies = [
  "deadpool",
  "redis",
+ "serde",
 ]
 
 [[package]]

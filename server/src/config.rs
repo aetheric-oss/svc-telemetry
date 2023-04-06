@@ -14,10 +14,8 @@ pub struct Config {
     pub docker_port_grpc: u16,
     /// port to be used for REST server
     pub docker_port_rest: u16,
-    /// port to be used for the Redis server
-    pub docker_port_redis: u16,
-    /// host to be used for the Redis server
-    pub docker_host_redis: String,
+    /// config to be used for the Redis server
+    pub redis: deadpool_redis::Config,
     /// path to log configuration YAML file
     pub log_config: String,
 }
@@ -34,8 +32,7 @@ impl Config {
         Config {
             docker_port_grpc: 50051,
             docker_port_rest: 8000,
-            docker_port_redis: 6379,
-            docker_host_redis: "redis".to_string(),
+            redis: deadpool_redis::Config::default(),
             log_config: String::from("log4rs.yaml"),
         }
     }
@@ -48,8 +45,6 @@ impl Config {
         config::Config::builder()
             .set_default("docker_port_grpc", 50051)?
             .set_default("docker_port_rest", 8000)?
-            .set_default("docker_port_redis", 6379)?
-            .set_default("docker_host_redis", String::from("redis"))?
             .set_default("log_config", String::from("log4rs.yaml"))?
             .add_source(Environment::default().separator("__"))
             .build()?
