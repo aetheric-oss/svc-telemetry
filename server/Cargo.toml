@@ -26,6 +26,7 @@ deadpool-redis = { version = "0.11", features = ["serde"] }
 dotenv         = "0.15"
 futures        = "0.3"
 hyper          = "0.14"
+lapin          = "2.1"
 log            = "0.4"
 mavlink        = "0.10"
 openssl        = "0.10"
@@ -44,8 +45,10 @@ tonic-health   = "0.7"
 uuid           = { version = "1.2", features = ["serde"] }
 
 [dependencies.svc-storage-client-grpc]
-git = "https://github.com/Arrow-air/svc-storage"
-tag = "v0.10.0"
+default-features = false
+features         = ["adsb"]
+git              = "https://github.com/Arrow-air/svc-storage"
+tag              = "v0.10.1-develop.0"
 
 [dependencies.log4rs]
 features = [
