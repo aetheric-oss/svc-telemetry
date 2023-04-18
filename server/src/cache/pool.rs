@@ -5,6 +5,7 @@ use snafu::prelude::Snafu;
 #[allow(missing_debug_implementations)]
 pub struct RedisPool {
     pool: Pool, // doesn't implement Debug
+    key_folder: String,
     expiration_ms: u32,
 }
 
@@ -21,20 +22,40 @@ pub enum CacheError {
 }
 
 impl RedisPool {
+    /// Create a new RedisPool
+    /// The 'key_folder' argument is prepended to the key being stored. The
+    ///  complete key will take the format <folder>:<subset>:<subset>:<key>.
+    ///  This is used to differentiate keys inserted into Redis by different
+    ///  microservices. For example, an ADS-B key in svc-telemetry might be
+    ///  formatted `telemetry:adsb:1234567890`.
     pub async fn new(
         config: crate::config::Config,
+        key_folder: &str,
         expiration_ms: u32,
-    ) -> Result<Self, CacheError> {
-        cache_info!("(RedisPool new) entry.");
+    ) -> Result<Self, ()> {
+        // the .env file must have REDIS__URL="redis://<host>>:<port>"
+        let cfg: deadpool_redis::Config = config.redis;
 
-        match config.redis.create_pool(Some(Runtime::Tokio1)) {
-            Ok(pool) => Ok(RedisPool {
-                pool,
-                expiration_ms,
-            }),
+        cache_info!("{:?}", cfg);
+
+        let Some(details) = cfg.url.clone() else {
+            cache_error!("(RedisPool new) no connection address found.");
+            return Err(());
+        };
+
+        cache_info!("(RedisPool new) creating pool at {:?}...", details);
+        match cfg.create_pool(Some(Runtime::Tokio1)) {
+            Ok(pool) => {
+                cache_info!("(RedisPool new) pool created.");
+                Ok(RedisPool {
+                    pool,
+                    key_folder: String::from(key_folder),
+                    expiration_ms,
+                })
+            }
             Err(e) => {
                 cache_error!("(RedisPool new) could not create pool: {}", e);
-                Err(CacheError::CouldNotConfigure)
+                Err(())
             }
         }
     }
@@ -43,19 +64,23 @@ impl RedisPool {
     /// If the key exists, increments the key and doesn't extend the expiration time.
     ///
     /// Returns the order in which this specific key was received (1 for first time).
-    pub async fn try_key(&mut self, key: u32) -> Result<i64, CacheError> {
-        cache_info!("(try_key) entry with key {}.", key);
+    pub async fn try_key(&mut self, key: u32) -> Result<u32, CacheError> {
+        let key = format!("{}:{}", self.key_folder, key);
+        cache_info!("(try_key) entry with key {}.", &key);
 
-        let Ok(mut connection) = self.pool.get().await else {
-            cache_error!("(try_key) could not connect to redis deadpool.");
-            return Err(CacheError::CouldNotConnect);
+        let mut connection = match self.pool.get().await {
+            Ok(connection) => connection,
+            Err(e) => {
+                cache_error!("(try_key) could not connect to redis deadpool: {e}");
+                return Err(CacheError::CouldNotConnect);
+            }
         };
 
         let mut result = match redis::pipe()
             .atomic()
             // Return the value of this increment (1 if key didn't exist before)
             .cmd("INCR")
-            .arg(&[key])
+            .arg(&[&key])
             // Set the expiration time
             .cmd("PEXPIRE")
             .arg(key)
@@ -68,16 +93,14 @@ impl RedisPool {
         {
             Ok(redis::Value::Bulk(val)) => val,
             Ok(value) => {
-                cache_error!("(try_key) Operation failed, unexpected redis response.");
-                cache_debug!(
+                cache_error!(
                     "(try_key) Operation failed, unexpected redis response: {:?}",
                     value
                 );
                 return Err(CacheError::OperationFailed);
             }
             Err(e) => {
-                cache_error!("(try_key) Operation failed, redis error.");
-                cache_debug!("(try_key) Operation failed, redis error: {}", e);
+                cache_error!("(try_key) Operation failed, redis error: {}", e);
                 return Err(CacheError::OperationFailed);
             }
         };
@@ -85,8 +108,7 @@ impl RedisPool {
         let new_value = match result.pop() {
             Some(redis::Value::Int(new_value)) => new_value,
             Some(value) => {
-                cache_info!("(try_key) Operation failed, unexpected redis response.");
-                cache_debug!(
+                cache_error!(
                     "(try_key) Operation failed, unexpected redis response: {:?}",
                     value
                 );
@@ -98,6 +120,15 @@ impl RedisPool {
             }
         };
 
-        Ok(new_value)
+        // Received value should be greater than 0, return a u32 type
+        if new_value < 1 {
+            cache_error!(
+                "(try_key) operation failed, unexpected value: {:?}",
+                new_value
+            );
+            return Err(CacheError::OperationFailed);
+        }
+
+        Ok(new_value as u32)
     }
 }

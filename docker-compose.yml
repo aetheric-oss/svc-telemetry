@@ -2,15 +2,16 @@
 version: '3.6'
 volumes:
   redis-data:
+  rabbitmq-data:
 
 services:
   redis:
     container_name: svc-telemetry-redis
     image: redis:6.2-alpine
     restart: always
-    expose:
-      - ${REDIS_PORT}
-    command: redis-server --save 20 1 --loglevel warning --port ${REDIS_PORT}
+    command: redis-server --save 20 1 --loglevel warning
+    ports:
+      - 6379:6379
     healthcheck:
       test: ["CMD", "redis-cli","ping"]
       interval: 2s
@@ -21,7 +22,23 @@ services:
     environment:
       - REDIS_DISABLE_COMMANDS=FLUSHDB,FLUSHALL,CONFIG
       - ALLOW_EMPTY_PASSWORD=yes
-      - REDIS_PORT_NUMBER=${REDIS_PORT}
+
+  rabbitmq:
+    container_name: arrow-rabbitmq
+    image: rabbitmq:3.11-alpine
+    restart: always
+    ports:
+      - 5672:5672
+    command: rabbitmq-server
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics","ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+    volumes:
+      - rabbitmq-data:/data
+    environment:
+      - RABBITMQ_NODENAME
 
   web-server:
     container_name: ${DOCKER_NAME}-example-server
@@ -29,10 +46,15 @@ services:
     depends_on:
       redis:
         condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    links:
+      - redis
+      - rabbitmq
     volumes:
       - type: bind
         source: log4rs.yaml
-        target: /log4rs.yaml
+        target: ${LOG_CONFIG}
     ports:
       - ${HOST_PORT_REST}:${DOCKER_PORT_REST}
       - ${HOST_PORT_GRPC}:${DOCKER_PORT_GRPC}
@@ -42,10 +64,14 @@ services:
       timeout: 1s
       retries: 3
     environment:
-      - REDIS_HOST
-      - REDIS_PORT
+      - REDIS__URL
+      - REDIS__POOL__MAX_SIZE
       - STORAGE_HOST_GRPC
       - STORAGE_PORT_GRPC
+      - RABBITMQ_NODENAME
+      - DOCKER_PORT_REST
+      - DOCKER_PORT_GRPC
+      - LOG_CONFIG
 
   example:
     links:

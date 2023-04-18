@@ -18,28 +18,6 @@ pub struct GrpcClient<T> {
     address: String,
 }
 
-/// Returns a string in http://host:port format from provided
-/// environment variables
-fn get_grpc_endpoint(env_host: &str, env_port: &str) -> String {
-    grpc_info!("(get_grpc_endpoint) entry.");
-    let port = match std::env::var(env_port) {
-        Ok(s) => s,
-        Err(_) => {
-            grpc_error!("(env) {} undefined.", env_port);
-            "".to_string()
-        }
-    };
-    let host = match std::env::var(env_host) {
-        Ok(s) => s,
-        Err(_) => {
-            grpc_error!("(env) {} undefined.", env_host);
-            "".to_string()
-        }
-    };
-
-    format!("http://{host}:{port}")
-}
-
 impl<T> GrpcClient<T> {
     pub async fn invalidate(&mut self) {
         let arc = Arc::clone(&self.inner);
@@ -47,11 +25,11 @@ impl<T> GrpcClient<T> {
         *client = None;
     }
 
-    pub fn new(env_host: &str, env_port: &str) -> Self {
+    pub fn new(env_host: &str, env_port: u16) -> Self {
         let opt: Option<T> = None;
         GrpcClient {
             inner: Arc::new(Mutex::new(opt)),
-            address: get_grpc_endpoint(env_host, env_port),
+            address: format!("http://{env_host}:{env_port}"),
         }
     }
 }
@@ -103,9 +81,12 @@ macro_rules! grpc_client {
 grpc_client!(AdsbClient, "adsb");
 
 impl GrpcClients {
-    pub fn default() -> Self {
+    pub fn default(config: crate::config::Config) -> Self {
         GrpcClients {
-            adsb: GrpcClient::<AdsbClient<Channel>>::new("STORAGE_HOST_GRPC", "STORAGE_PORT_GRPC"),
+            adsb: GrpcClient::<AdsbClient<Channel>>::new(
+                &config.storage_host_grpc,
+                config.storage_port_grpc,
+            ),
         }
     }
 }
