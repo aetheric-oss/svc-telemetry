@@ -59,7 +59,7 @@ loggers:
     appenders:
       - grpc_requests
   app::cache:
-    level: info
+    level: debug
     appenders:
       - cache_requests
   app::rest:

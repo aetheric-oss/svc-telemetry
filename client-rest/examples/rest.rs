@@ -1,4 +1,5 @@
 //! Example communication with this service
+use dotenv;
 use hyper::{client::connect::HttpConnector, Body, Client, Method, Request, Response};
 use hyper::{Error, StatusCode};
 use svc_telemetry_client_rest::types::{MavFrame, MavMessage, MavlinkVersion, ADSB_VEHICLE_DATA};
@@ -201,8 +202,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         "NOTE: Ensure the server and redis containers are running, or this example will fail."
     );
 
+    dotenv::dotenv().ok();
+
     let host = std::env::var("SERVER_HOSTNAME").unwrap_or_else(|_| "0.0.0.0".to_string());
-    let port = std::env::var("SERVER_PORT_REST").unwrap_or_else(|_| "8007".to_string());
+    let port = std::env::var("HOST_PORT_REST").unwrap_or_else(|_| "8007".to_string());
 
     let url = format!("http://{host}:{port}");
     println!("{url}");
