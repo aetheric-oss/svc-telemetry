@@ -17,9 +17,22 @@ pub mod rest_types {
 }
 
 pub use mavlink::{common::MavMessage, MavFrame, MavlinkVersion, Message};
+
 pub use rest_types::Keys;
 
+/// Expected size of ADSB packets
 const ADSB_SIZE_BYTES: usize = 14;
+
+/// Number of times a packet must be received before it is considered valid
+/// TODO(R4): Raise after implementing unique confirmations based on user_id
+const N_REPORTERS_NEEDED: u32 = 1;
+
+/// ADSB Message Metadata
+#[derive(Debug)]
+pub struct HeaderData {
+    pub icao_address: i64,
+    pub message_type: i64,
+}
 
 #[derive(Debug, Snafu)]
 enum ProcessError {
@@ -30,15 +43,101 @@ enum ProcessError {
     CouldNotWriteCache,
 }
 
+/// Conditionally forwards a telemetry packet to svc-storage and RabbitMQ
+/// A telemetry packet should only be forwarded once, and only after it has
+///  been received [`N_REPORTERS_NEEDED`] times by unique authorized
+///  users.
+async fn handle_adsb(
+    payload: &[u8],
+    header_data: HeaderData,
+    reporter_count: u32,
+    mq_channel: lapin::Channel,
+    mut grpc_clients: GrpcClients,
+) -> Result<Json<u32>, StatusCode> {
+    rest_info!(
+        "(handle_adsb) icao={}, type={}, reporter={}.",
+        header_data.icao_address,
+        header_data.message_type,
+        reporter_count
+    );
+
+    match reporter_count.cmp(&N_REPORTERS_NEEDED) {
+        Ordering::Less => {
+            rest_error!(
+                "(handle_adsb) ADS-B reporter count should be impossible: {}.",
+                reporter_count
+            );
+            return Err(StatusCode::INTERNAL_SERVER_ERROR);
+        }
+        Ordering::Greater => {
+            rest_info!(
+                "(handle_adsb) ADS-B reporter count is greater than needed: {}.",
+                reporter_count
+            );
+            // TODO(R4) push up to N reporter confirmations to svc-storage with user_ids
+            return Ok(Json(reporter_count));
+        }
+        _ => (), // continue
+    }
+
+    // Send to RabbitMQ
+    let result = mq_channel
+        .basic_publish(
+            super::server::EXCHANGE_NAME_TELEMETRY,
+            super::server::ROUTING_KEY_ADSB,
+            lapin::options::BasicPublishOptions::default(),
+            payload,
+            lapin::BasicProperties::default(),
+        )
+        .await;
+
+    match result {
+        Ok(_) => rest_info!("(handle_adsb) telemetry pushed to RabbitMQ."),
+        Err(e) => rest_error!("(handle_adsb) telemetry push to RabbitMQ failed: {}.", e),
+    }
+
+    // Send to svc-storage
+    let current_time = prost_types::Timestamp::from(SystemTime::now());
+    let data = adsb::Data {
+        icao_address: header_data.icao_address,
+        message_type: header_data.message_type,
+        network_timestamp: Some(current_time),
+        payload: payload.to_vec(),
+    };
+
+    // Make request
+    let request = tonic::Request::new(data);
+    let Some(mut client) = grpc_clients.adsb.get_client().await else {
+        rest_error!("(handle_adsb) could not get svc-storage client.");
+        grpc_clients.adsb.invalidate().await;
+        return Err(StatusCode::SERVICE_UNAVAILABLE);
+    };
+
+    match client.insert(request).await {
+        Ok(_) => rest_info!("(handle_adsb) telemetry pushed to svc-storage."),
+        Err(e) => {
+            rest_error!("(handle_adsb) telemetry push to svc-storage failed: {}.", e);
+            return Err(StatusCode::INTERNAL_SERVER_ERROR);
+        }
+    }
+
+    Ok(Json(reporter_count))
+}
+
 /// Parses a Mavlink packet from bytes and reports the number of times
 ///  this specific packet has been received
 async fn process_mavlink(
     payload: &[u8],
     mut cache: RedisPool,
-) -> Result<(MavFrame<MavMessage>, i64), ProcessError> {
+) -> Result<(HeaderData, u32), ProcessError> {
     rest_info!("(process_mavlink) entry.");
 
     let Ok(frame) = MavFrame::<MavMessage>::deser(MavlinkVersion::V2, payload) else {
+        return Err(ProcessError::CouldNotParse);
+    };
+
+    let MavMessage::ADSB_VEHICLE(adsb) = frame.msg.clone() else {
+        rest_info!("(process_mavlink) Could not parse mavlink message into ADSB_VEHICLE_DATA.");
         return Err(ProcessError::CouldNotParse);
     };
 
@@ -51,7 +150,12 @@ async fn process_mavlink(
         return Err(ProcessError::CouldNotWriteCache);
     };
 
-    Ok((frame, count))
+    let header = HeaderData {
+        icao_address: adsb.ICAO_address as i64,
+        message_type: -1, // TODO(R3) Mavlink doesn't have traditional ADSB message types
+    };
+
+    Ok((header, count))
 }
 
 /// Health check for load balancing
@@ -106,13 +210,14 @@ pub async fn health_check(
 pub async fn mavlink_adsb(
     Extension(mavlink_cache): Extension<RedisPool>,
     Extension(_ac): Extension<RedisPool>,
-    Extension(mut _grpc_clients): Extension<GrpcClients>,
+    Extension(mq_channel): Extension<lapin::Channel>,
+    Extension(grpc_clients): Extension<GrpcClients>,
     payload: Bytes,
-) -> Result<Json<i64>, StatusCode> {
+) -> Result<Json<u32>, StatusCode> {
     rest_info!("(mavlink_adsb) entry.");
 
     let result = process_mavlink(&payload, mavlink_cache).await;
-    let Ok((_frame, count)) = result else {
+    let Ok((header_data, count)) = result else {
         match result {
             Err(ProcessError::CouldNotParse) => {
                 return Err(StatusCode::BAD_REQUEST);
@@ -123,31 +228,7 @@ pub async fn mavlink_adsb(
         };
     };
 
-    match count.cmp(&1) {
-        Ordering::Less => {
-            rest_error!(
-                "(mavlink_adsb) ADS-B report count should be impossible: {}.",
-                count
-            );
-            return Err(StatusCode::INTERNAL_SERVER_ERROR);
-        }
-        Ordering::Equal => {
-            rest_info!("(mavlink_adsb) first time this ADS-B packet was received.");
-            // write raw packet to svc-storage
-        }
-        _ => {
-            rest_info!(
-                "(mavlink_adsb) confirmations received for this ADS-B packet: {}.",
-                count
-            );
-            // increment confirmations to svc-storage?
-        }
-    };
-
-    // Push to svc-storage
-    // Push to third-party
-    rest_info!("(mavlink_adsb) success");
-    Ok(Json(count))
+    handle_adsb(&payload, header_data, count, mq_channel, grpc_clients).await
 }
 
 /// Parses the ADS-B packet for the message type filed
@@ -162,7 +243,7 @@ fn get_adsb_message_type(bytes: &[u8; ADSB_SIZE_BYTES]) -> i64 {
 async fn process_adsb(
     payload: &[u8],
     mut cache: RedisPool,
-) -> Result<(i64, i64, i64), ProcessError> {
+) -> Result<(HeaderData, u32), ProcessError> {
     rest_info!("(process_adsb) entry.");
 
     let Ok(payload) = <[u8; ADSB_SIZE_BYTES]>::try_from(payload) else {
@@ -190,11 +271,12 @@ async fn process_adsb(
         return Err(ProcessError::CouldNotWriteCache);
     };
 
-    Ok((
-        frame.primary_key() as i64,
-        get_adsb_message_type(&payload),
-        count,
-    ))
+    let header_data = HeaderData {
+        icao_address: frame.primary_key() as i64,
+        message_type: get_adsb_message_type(&payload),
+    };
+
+    Ok((header_data, count))
 }
 
 /// Post ADS-B Telemetry
@@ -214,13 +296,14 @@ async fn process_adsb(
 pub async fn adsb(
     Extension(_mc): Extension<RedisPool>,
     Extension(adsb_cache): Extension<RedisPool>,
-    Extension(mut grpc_clients): Extension<GrpcClients>,
+    Extension(mq_channel): Extension<lapin::Channel>,
+    Extension(grpc_clients): Extension<GrpcClients>,
     payload: Bytes,
-) -> Result<Json<i64>, StatusCode> {
+) -> Result<Json<u32>, StatusCode> {
     rest_info!("(adsb) entry.");
 
     let result = process_adsb(&payload, adsb_cache).await;
-    let Ok((icao_address, message_type, count)) = result else {
+    let Ok((header_data, count)) = result else {
         match result {
             Err(ProcessError::CouldNotParse) => {
                 return Err(StatusCode::BAD_REQUEST);
@@ -231,51 +314,7 @@ pub async fn adsb(
         };
     };
 
-    match count.cmp(&1) {
-        Ordering::Less => {
-            rest_info!("(adsb) ADS-B report count should be impossible: {}.", count);
-            return Err(StatusCode::INTERNAL_SERVER_ERROR);
-        }
-        Ordering::Equal => {
-            // continue
-        }
-        _ => {
-            rest_info!(
-                "(adsb) confirmations received for this ADS-B packet: {}.",
-                count
-            );
-
-            // increment confirmations to svc-storage when crowdsourcing telemetry
-
-            return Ok(Json(count));
-        }
-    };
-
-    rest_info!("(adsb) first time this ADS-B packet was received.");
-
-    let current_time = prost_types::Timestamp::from(SystemTime::now());
-    let data = adsb::Data {
-        icao_address,
-        message_type,
-        network_timestamp: Some(current_time),
-        payload: payload.to_vec(),
-    };
-
-    // Make request
-    let request = tonic::Request::new(data);
-    let Some(mut client) = grpc_clients.adsb.get_client().await else {
-        rest_error!("(adsb) could not get svc-storage client.");
-        grpc_clients.adsb.invalidate().await;
-        return Err(StatusCode::SERVICE_UNAVAILABLE);
-    };
-    let response = client.insert(request).await;
-    if response.is_err() {
-        rest_error!("(adsb) telemetry push to svc-storage failed.");
-        return Err(StatusCode::INTERNAL_SERVER_ERROR);
-    }
-
-    rest_info!("(adsb) success.");
-    Ok(Json(count))
+    handle_adsb(&payload, header_data, count, mq_channel, grpc_clients).await
 }
 
 #[cfg(test)]
