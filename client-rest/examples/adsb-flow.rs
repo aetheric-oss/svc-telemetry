@@ -1,8 +1,52 @@
 //! Simulates a flow of ADS-B with multiple reporters
 
 use dotenv;
+use futures_lite::stream::StreamExt;
 use hyper::StatusCode;
 use hyper::{Body, Client, Method, Request};
+
+async fn mq_listener() -> Result<(), ()> {
+    let mq_addr = format!("amqp://localhost:5672");
+
+    // Establish connection to RabbitMQ node
+    println!("(mq_listener) connecting to MQ server at {}...", mq_addr);
+    let result = lapin::Connection::connect(&mq_addr, lapin::ConnectionProperties::default()).await;
+    let mq_connection = match result {
+        Ok(conn) => conn,
+        Err(e) => {
+            println!("(mq_listener) could not connect to MQ server at {mq_addr}.");
+            println!("(mq_listener) error: {:?}", e);
+            return Err(());
+        }
+    };
+
+    // Create channel
+    println!("(mq_listener) creating channel at {}...", mq_addr);
+    let mq_channel = match mq_connection.create_channel().await {
+        Ok(channel) => channel,
+        Err(e) => {
+            println!("(mq_listener) could not create channel at {mq_addr}.");
+            println!("(mq_listener) error: {:?}", e);
+            return Err(());
+        }
+    };
+
+    let mut consumer = mq_channel
+        .basic_consume(
+            "adsb",
+            "mq_listener",
+            lapin::options::BasicConsumeOptions::default(),
+            lapin::types::FieldTable::default(),
+        )
+        .await
+        .unwrap();
+
+    while let Some(delivery) = consumer.next().await {
+        println!("received message {:?}", delivery);
+    }
+
+    Ok(())
+}
 
 async fn adsb(url: String) {
     let client = Client::builder()
@@ -54,6 +98,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let url = format!("http://{host}:{port}");
     println!("{url}");
+
+    tokio::spawn(mq_listener());
 
     let reporters = 3;
     for _ in 0..reporters {
