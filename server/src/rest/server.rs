@@ -2,14 +2,15 @@
 
 use super::api;
 use crate::cache::pool::RedisPool;
+use crate::cache::RedisPools;
 use crate::grpc::client::GrpcClients;
 use crate::shutdown_signal;
 use axum::{extract::Extension, routing, Router};
 
-/// Mavlink entries in the cache will expire after 5 seconds
+/// Mavlink entries in the cache will expire after 60 seconds
 const CACHE_EXPIRE_MS_MAVLINK_ADSB: u32 = 5000;
 
-/// Mavlink entries in the cache will expire after 10 seconds
+/// Mavlink entries in the cache will expire after 60 seconds
 const CACHE_EXPIRE_MS_AIRCRAFT_ADSB: u32 = 10000;
 
 /// Name of the AMQP exchange for telemetry messages
@@ -127,12 +128,11 @@ pub async fn rest_server(config: crate::config::Config) -> Result<(), ()> {
     // GRPC Clients
     let grpc_clients = GrpcClients::default(config.clone());
 
-    // Redis Caches
-    let mavlink_cache =
-        RedisPool::new(config.clone(), "tlm:mav", CACHE_EXPIRE_MS_MAVLINK_ADSB).await?;
-
-    let adsb_cache =
-        RedisPool::new(config.clone(), "tlm:adsb", CACHE_EXPIRE_MS_AIRCRAFT_ADSB).await?;
+    // Redis Pools
+    let pools = RedisPools {
+        mavlink: RedisPool::new(config.clone(), "tlm:mav", CACHE_EXPIRE_MS_MAVLINK_ADSB).await?,
+        adsb: RedisPool::new(config.clone(), "tlm:adsb", CACHE_EXPIRE_MS_AIRCRAFT_ADSB).await?,
+    };
 
     // RabbitMQ Channel
     let mq_channel = init_mq(config.clone()).await?;
@@ -144,8 +144,7 @@ pub async fn rest_server(config: crate::config::Config) -> Result<(), ()> {
         .route("/health", routing::get(api::health_check))
         .route("/telemetry/mavlink/adsb", routing::post(api::mavlink_adsb))
         .route("/telemetry/aircraft/adsb", routing::post(api::adsb))
-        .layer(Extension(mavlink_cache))
-        .layer(Extension(adsb_cache))
+        .layer(Extension(pools))
         .layer(Extension(mq_channel))
         .layer(Extension(grpc_clients));
 
