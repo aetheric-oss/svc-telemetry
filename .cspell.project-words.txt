@@ -48,3 +48,4 @@ deku
 dotenv
 amqp
 rabbitmq
+nodename
