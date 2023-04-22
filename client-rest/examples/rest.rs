@@ -130,7 +130,7 @@ async fn adsb(url: &str, client: &Client<HttpConnector>) {
 
     // POST /telemetry/mavlink/adsb NOMINAL
     println!(
-        "Send {} packets with different headers, expect \
+        "Send {} packets with different ICAO addresses, expect \
         response body value of 1 each time",
         max + 1
     );
