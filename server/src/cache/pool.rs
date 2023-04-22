@@ -35,15 +35,16 @@ impl RedisPool {
     ) -> Result<Self, ()> {
         // the .env file must have REDIS__URL="redis://<host>>:<port>"
         let cfg: deadpool_redis::Config = config.redis;
-
-        cache_info!("{:?}", cfg);
-
         let Some(details) = cfg.url.clone() else {
             cache_error!("(RedisPool new) no connection address found.");
             return Err(());
         };
 
-        cache_info!("(RedisPool new) creating pool at {:?}...", details);
+        cache_info!(
+            "(RedisPool new) creating pool with key folder '{}' at {:?}...",
+            key_folder,
+            details
+        );
         match cfg.create_pool(Some(Runtime::Tokio1)) {
             Ok(pool) => {
                 cache_info!("(RedisPool new) pool created.");
@@ -65,7 +66,7 @@ impl RedisPool {
     ///
     /// Returns the order in which this specific key was received (1 for first time).
     pub async fn try_key(&mut self, key: u32) -> Result<u32, CacheError> {
-        let key = format!("{}:{}", self.key_folder, key);
+        let key = format!("{}:{}", &self.key_folder, key);
         cache_info!("(try_key) entry with key {}.", &key);
 
         let mut connection = match self.pool.get().await {

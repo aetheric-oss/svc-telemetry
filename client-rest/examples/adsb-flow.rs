@@ -16,7 +16,7 @@ async fn adsb(url: String) {
     let mut count: u8 = 0;
     loop {
         let payload: [u8; 14] = [
-            0x8D, 0x48, 0x40, count, 0x20, 0x2C, 0xC3, 0x71, 0xC3, 0x2C, 0xE0, 0x57, 0x60, 0x98,
+            0x8D, 0x48, 0x40, 0xD6, 0x20, 0x2C, 0xC3, 0x71, 0xC3, 0x2C, 0xE0, 0x57, 0x60, count,
         ];
 
         count += 1;
@@ -49,20 +49,19 @@ async fn adsb(url: String) {
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     dotenv::dotenv().ok();
 
-    // let host = std::env::var("SERVER_HOSTNAME").unwrap_or_else(|_| "0.0.0.0".to_string());
+    let host = std::env::var("SERVER_HOSTNAME").unwrap_or_else(|_| "0.0.0.0".to_string());
     let port = std::env::var("HOST_PORT_REST").unwrap_or_else(|_| "8011".to_string());
 
-    let url = format!("http://web-server:{port}");
+    let url = format!("http://{host}:{port}");
     println!("{url}");
 
-    // first reporter
-    tokio::spawn(adsb(url.clone()));
-
-    let confirmations = 3;
-    for _ in 0..confirmations {
-        std::thread::sleep(std::time::Duration::from_millis(225)); // slight lag
+    let reporters = 3;
+    for _ in 0..reporters {
         tokio::spawn(adsb(url.clone()));
+        std::thread::sleep(std::time::Duration::from_millis(225)); // slight lag
     }
+
+    std::thread::sleep(std::time::Duration::from_secs(10));
 
     Ok(())
 }

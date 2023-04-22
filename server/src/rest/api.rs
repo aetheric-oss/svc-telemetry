@@ -1,6 +1,7 @@
 //! REST API implementations for svc-telemetry
 
 use crate::cache::pool::RedisPool;
+use crate::cache::RedisPools;
 use crate::grpc::client::GrpcClients;
 
 use adsb_deku::deku::DekuContainerRead;
@@ -208,15 +209,14 @@ pub async fn health_check(
     )
 )]
 pub async fn mavlink_adsb(
-    Extension(mavlink_cache): Extension<RedisPool>,
-    Extension(_ac): Extension<RedisPool>,
+    Extension(pools): Extension<RedisPools>,
     Extension(mq_channel): Extension<lapin::Channel>,
     Extension(grpc_clients): Extension<GrpcClients>,
     payload: Bytes,
 ) -> Result<Json<u32>, StatusCode> {
     rest_info!("(mavlink_adsb) entry.");
 
-    let result = process_mavlink(&payload, mavlink_cache).await;
+    let result = process_mavlink(&payload, pools.mavlink).await;
     let Ok((header_data, count)) = result else {
         match result {
             Err(ProcessError::CouldNotParse) => {
@@ -294,15 +294,14 @@ async fn process_adsb(
     )
 )]
 pub async fn adsb(
-    Extension(_mc): Extension<RedisPool>,
-    Extension(adsb_cache): Extension<RedisPool>,
+    Extension(pools): Extension<RedisPools>,
     Extension(mq_channel): Extension<lapin::Channel>,
     Extension(grpc_clients): Extension<GrpcClients>,
     payload: Bytes,
 ) -> Result<Json<u32>, StatusCode> {
     rest_info!("(adsb) entry.");
 
-    let result = process_adsb(&payload, adsb_cache).await;
+    let result = process_adsb(&payload, pools.adsb).await;
     let Ok((header_data, count)) = result else {
         match result {
             Err(ProcessError::CouldNotParse) => {
