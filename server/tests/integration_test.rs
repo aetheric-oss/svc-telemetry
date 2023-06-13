@@ -1,9 +1,12 @@
-//! Example for writing an integration test.
-//! More information: https://doc.rust-lang.org/book/testing-rust.html#integration-tests
+#[tokio::test]
+async fn test_grpc_server_start() {
+    use svc_telemetry::config::Config;
+    use svc_telemetry::grpc::server::*;
 
-// use tmp_lib;
+    let (shutdown_tx, shutdown_rx) = tokio::sync::oneshot::channel::<()>();
+    tokio::spawn(async move {
+        grpc_server(Config::default(), Some(shutdown_rx)).await;
+    });
 
-// #[test]
-// fn it_add_one() {
-//     assert_eq!(2, tmp_lib::add_one(1));
-// }
+    shutdown_tx.send(()).expect("Could not stop server.");
+}
