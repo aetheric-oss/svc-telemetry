@@ -1,22 +1,44 @@
+//! Redis connection pool implementation
+
+use core::fmt::{Debug, Formatter};
 use deadpool_redis::{redis, Pool, Runtime};
 use snafu::prelude::Snafu;
 
+/// Represents a pool of connections to a Redis server.
+///
+/// The [`RedisPool`] struct provides a managed pool of connections to a Redis server.
+/// It allows clients to acquire and release connections from the pool and handles
+/// connection management, such as connection pooling and reusing connections.
 #[derive(Clone)]
-#[allow(missing_debug_implementations)]
 pub struct RedisPool {
-    pool: Pool, // doesn't implement Debug
+    /// The underlying pool of Redis connections.
+    pool: Pool,
+    /// The string prepended to the key being stored.
     key_folder: String,
+    /// The expiration time for keys in milliseconds.
     expiration_ms: u32,
 }
+impl Debug for RedisPool {
+    fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
+        f.debug_struct("RedisPool")
+            .field("key_folder", &self.key_folder)
+            .field("expiration_ms", &self.expiration_ms)
+            .finish()
+    }
+}
 
+/// Represents errors that can occur during cache operations.
 #[derive(Debug, Clone, Copy, Snafu)]
 pub enum CacheError {
+    /// Could not build configuration for cache.
     #[snafu(display("Could not build configuration for cache."))]
     CouldNotConfigure,
 
+    /// Could not connect to the Redis pool.
     #[snafu(display("Could not connect to redis pool."))]
     CouldNotConnect,
 
+    /// The operation on the Redis cache failed.
     #[snafu(display("The operation on the redis cache failed."))]
     OperationFailed,
 }
@@ -24,7 +46,7 @@ pub enum CacheError {
 impl RedisPool {
     /// Create a new RedisPool
     /// The 'key_folder' argument is prepended to the key being stored. The
-    ///  complete key will take the format <folder>:<subset>:<subset>:<key>.
+    ///  complete key will take the format \<folder\>:\<subset\>:\<subset\>:\<key\>.
     ///  This is used to differentiate keys inserted into Redis by different
     ///  microservices. For example, an ADS-B key in svc-telemetry might be
     ///  formatted `telemetry:adsb:1234567890`.
@@ -33,7 +55,7 @@ impl RedisPool {
         key_folder: &str,
         expiration_ms: u32,
     ) -> Result<Self, ()> {
-        // the .env file must have REDIS__URL="redis://<host>>:<port>"
+        // the .env file must have REDIS__URL="redis://\<host\>:\<port\>"
         let cfg: deadpool_redis::Config = config.redis;
         let Some(details) = cfg.url.clone() else {
             cache_error!("(RedisPool new) no connection address found.");

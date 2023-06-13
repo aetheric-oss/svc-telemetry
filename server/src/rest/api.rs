@@ -1,16 +1,16 @@
 //! REST API implementations for svc-telemetry
 
+use crate::amqp::AMQPChannel;
 use crate::cache::pool::RedisPool;
 use crate::cache::RedisPools;
 use crate::grpc::client::GrpcClients;
-
-use adsb_deku::deku::DekuContainerRead;
+use adsb_deku::{deku::DekuContainerRead, Frame};
 use axum::{body::Bytes, extract::Extension, Json};
 use hyper::StatusCode;
 use snafu::prelude::Snafu;
 use std::cmp::Ordering;
 use std::time::SystemTime;
-use svc_storage_client_grpc::adsb;
+use svc_storage_client_grpc::{adsb, ClientConnect, SimpleClient};
 
 /// Types Used in REST Messages
 pub mod rest_types {
@@ -29,9 +29,11 @@ const ADSB_SIZE_BYTES: usize = 14;
 const N_REPORTERS_NEEDED: u32 = 1;
 
 /// ADSB Message Metadata
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub struct HeaderData {
+    /// Header ICAO address
     pub icao_address: i64,
+    /// Header Message Type
     pub message_type: i64,
 }
 
@@ -42,18 +44,20 @@ enum ProcessError {
 
     #[snafu(display("Could not write to the cache."))]
     CouldNotWriteCache,
+
+    #[snafu(display("Could not write to queue."))]
+    CouldNotWriteMQ,
 }
 
-/// Conditionally forwards a telemetry packet to svc-storage and RabbitMQ
-/// A telemetry packet should only be forwarded once, and only after it has
+///  try packet should only be forwarded once, and only after it has
 ///  been received [`N_REPORTERS_NEEDED`] times by unique authorized
 ///  users.
 async fn handle_adsb(
     payload: &[u8],
     header_data: HeaderData,
     reporter_count: u32,
-    mq_channel: lapin::Channel,
-    mut grpc_clients: GrpcClients,
+    mq_channel: AMQPChannel,
+    grpc_clients: GrpcClients,
 ) -> Result<Json<u32>, StatusCode> {
     rest_info!(
         "(handle_adsb) icao={}, type={}, reporter={}.",
@@ -84,8 +88,8 @@ async fn handle_adsb(
     // Send to RabbitMQ
     let result = mq_channel
         .basic_publish(
-            super::server::EXCHANGE_NAME_TELEMETRY,
-            super::server::ROUTING_KEY_ADSB,
+            crate::amqp::EXCHANGE_NAME_TELEMETRY,
+            crate::amqp::ROUTING_KEY_ADSB,
             lapin::options::BasicPublishOptions::default(),
             payload,
             lapin::BasicProperties::default(),
@@ -108,11 +112,7 @@ async fn handle_adsb(
 
     // Make request
     let request = tonic::Request::new(data);
-    let Some(mut client) = grpc_clients.adsb.get_client().await else {
-        rest_error!("(handle_adsb) could not get svc-storage client.");
-        grpc_clients.adsb.invalidate().await;
-        return Err(StatusCode::SERVICE_UNAVAILABLE);
-    };
+    let client = &grpc_clients.storage.adsb;
 
     match client.insert(request).await {
         Ok(_) => rest_info!("(handle_adsb) telemetry pushed to svc-storage."),
@@ -170,22 +170,21 @@ async fn process_mavlink(
     )
 )]
 pub async fn health_check(
-    Extension(mut grpc_clients): Extension<GrpcClients>,
+    Extension(grpc_clients): Extension<GrpcClients>,
 ) -> Result<(), StatusCode> {
-    rest_info!("(health_check) entry.");
+    rest_debug!("(health_check) entry.");
 
     let mut ok = true;
 
-    let result = grpc_clients.adsb.get_client().await;
-    if result.is_none() {
-        let error_msg = "svc-storage unavailable.".to_string();
+    if grpc_clients.storage.adsb.get_client().await.is_err() {
+        let error_msg = "svc-storage adsb unavailable.".to_string();
         rest_error!("(health_check) {}.", &error_msg);
         ok = false;
-    };
+    }
 
     match ok {
         true => {
-            rest_info!("(health_check) healthy, all dependencies running.");
+            rest_debug!("(health_check) healthy, all dependencies running.");
             Ok(())
         }
         false => {
@@ -208,6 +207,7 @@ pub async fn health_check(
         (status = 500, description = "Something went wrong."),
     )
 )]
+
 pub async fn mavlink_adsb(
     Extension(pools): Extension<RedisPools>,
     Extension(mq_channel): Extension<lapin::Channel>,
@@ -228,7 +228,16 @@ pub async fn mavlink_adsb(
         };
     };
 
-    handle_adsb(&payload, header_data, count, mq_channel, grpc_clients).await
+    handle_adsb(
+        &payload,
+        header_data,
+        count,
+        AMQPChannel {
+            channel: Some(mq_channel),
+        },
+        grpc_clients,
+    )
+    .await
 }
 
 /// Parses the ADS-B packet for the message type filed
@@ -238,30 +247,37 @@ fn get_adsb_message_type(bytes: &[u8; ADSB_SIZE_BYTES]) -> i64 {
     ((bytes[4] >> 3) & 0x1F) as i64
 }
 
+/// Parses the message payload
+/// Returns a new [`Frame`] and the correct payload size based on [`ADSB_SIZE_BYTES`]
+fn get_frame_for_payload(payload: &[u8]) -> Result<(Frame, [u8; ADSB_SIZE_BYTES]), ProcessError> {
+    rest_info!("(get_frame_for_payload) entry.");
+
+    let Ok(payload) = <[u8; ADSB_SIZE_BYTES]>::try_from(payload) else {
+        rest_info!("(get_frame_for_payload) received ads-b message not {ADSB_SIZE_BYTES} bytes.");
+        return Err(ProcessError::CouldNotParse);
+    };
+
+    let Ok(frame) = adsb_deku::Frame::from_bytes((&payload, 0)) else {
+        rest_info!("(get_frame_for_payload) could not parse ads-b message.");
+        return Err(ProcessError::CouldNotParse);
+    };
+
+    let frame = frame.1;
+    let adsb_deku::DF::ADSB(_) = &frame.df else {
+        rest_info!("(get_frame_for_payload) received a non-ADSB format message.");
+        return Err(ProcessError::CouldNotParse);
+    };
+
+    Ok((frame, payload))
+}
+
 /// Parses an ADS-B packet from bytes and reports the number of times
 ///  this specific packet has been received
 async fn process_adsb(
     payload: &[u8],
     mut cache: RedisPool,
 ) -> Result<(HeaderData, u32), ProcessError> {
-    rest_info!("(process_adsb) entry.");
-
-    let Ok(payload) = <[u8; ADSB_SIZE_BYTES]>::try_from(payload) else {
-        rest_info!("(process_adsb) received ads-b message not {ADSB_SIZE_BYTES} bytes.");
-        return Err(ProcessError::CouldNotParse);
-    };
-
-    let Ok(frame) = adsb_deku::Frame::from_bytes((&payload, 0)) else {
-        rest_info!("(process_adsb) could not parse ads-b message.");
-        return Err(ProcessError::CouldNotParse);
-    };
-
-    let frame = frame.1;
-    let adsb_deku::DF::ADSB(_) = &frame.df else {
-        rest_info!("(process_adsb) received a non-ADSB format message.");
-        return Err(ProcessError::CouldNotParse);
-    };
-
+    let (frame, payload) = get_frame_for_payload(payload)?;
     let key: u32 = frame.hashed_key();
 
     // Set the key
@@ -313,12 +329,22 @@ pub async fn adsb(
         };
     };
 
-    handle_adsb(&payload, header_data, count, mq_channel, grpc_clients).await
+    handle_adsb(
+        &payload,
+        header_data,
+        count,
+        AMQPChannel {
+            channel: Some(mq_channel),
+        },
+        grpc_clients,
+    )
+    .await
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::config::Config;
 
     #[test]
     fn ut_get_adsb_message_type() -> Result<(), Box<dyn std::error::Error>> {
@@ -353,5 +379,49 @@ mod tests {
         }
 
         Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_health_check_success() {
+        // Mock the GrpcClients extension
+        let config = Config::default();
+        let grpc_clients = GrpcClients::default(config);
+
+        // Call the health_check function
+        let result = health_check(Extension(grpc_clients)).await;
+
+        // Assert the expected result
+        println!("{:?}", result);
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_handle_adsb_svc_storage() {
+        // Mock the GrpcClients extension
+        let config = Config::default();
+        let grpc_clients = GrpcClients::default(config);
+
+        let payload: [u8; 14] = [
+            0x8D, 0x48, 0x40, 0xD6, 0x20, 0x2C, 0xC3, 0x71, 0xC3, 0x2C, 0xE0, 0x57, 0x60, 0x98,
+        ];
+
+        let result = get_frame_for_payload(&payload);
+        assert!(result.is_ok());
+        let (frame, payload) = result.unwrap();
+        let header_data = HeaderData {
+            icao_address: frame.primary_key() as i64,
+            message_type: get_adsb_message_type(&payload),
+        };
+
+        let result = handle_adsb(
+            &payload,
+            header_data,
+            1,
+            AMQPChannel { channel: None },
+            grpc_clients,
+        )
+        .await;
+        println!("{:?}", result);
+        assert!(result.is_ok());
     }
 }

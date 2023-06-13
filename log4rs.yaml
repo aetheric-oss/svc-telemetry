@@ -7,7 +7,7 @@ appenders:
       pattern: "{d(%Y-%m-%d %H:%M:%S)} | {({l}):5.5} | {f}:{L} — {m}{n}"
   grpc_requests:
     kind: rolling_file
-    path: "log/grpc_requests.log"
+    path: "logs/grpc_requests.log"
     policy:
       trigger:
         kind: size
@@ -21,7 +21,7 @@ appenders:
       kind: json
   cache_requests:
     kind: rolling_file
-    path: "log/cache_requests.log"
+    path: "logs/cache_requests.log"
     policy:
       trigger:
         kind: size
@@ -35,7 +35,7 @@ appenders:
       kind: json
   rest_requests:
     kind: rolling_file
-    path: "log/rest_requests.log"
+    path: "logs/rest_requests.log"
     policy:
       trigger:
         kind: size
