@@ -49,3 +49,7 @@ dotenv
 amqp
 rabbitmq
 nodename
+logtest
+mavheader
+NANOS
+oneshot
