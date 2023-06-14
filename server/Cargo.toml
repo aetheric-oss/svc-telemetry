@@ -1,5 +1,5 @@
 [package]
-description = "Telemetry Service GRPC and REST servers"
+description = "Telemetry Service gRPC and REST servers"
 name        = "svc-telemetry"
 version     = "0.1.1-develop.0"
 
@@ -12,23 +12,40 @@ license-file.workspace = true
 repository.workspace   = true
 
 [features]
-vendored-openssl = ['openssl/vendored']
+default          = []
+dev              = ["mock"]
+test_util        = ["mock", "stub_backends"]
+vendored-openssl = ["openssl/vendored"]
+# Will add a 'mock' module for the enabled resources, providing access to mock data generation functions
+mock = []
+# Will use a stubbed backend connection, only use for tests!
+stub_backends = [
+  "svc-storage-client-grpc/stub_client",
+  "svc-storage-client-grpc/stub_backends",
+]
+# Will implement stub functions for the server, only use for tests!
+stub_server = ["test_util"]
+# Only added to support client-grpc feature when running tests
+stub_client = ["stub_backends"]
 
 [dependencies]
 adsb_deku      = "0.6"
 anyhow         = "1.0"
 axum           = "0.5"
 cargo-husky    = "1"
+cfg-if         = "1.0"
 chrono         = { version = "0.4", features = ["serde"] }
 clap           = { version = "4.0", features = ["derive"] }
 config         = "0.13"
+deadpool-lapin = { version = "0.10", features = ["serde"] }
 deadpool-redis = { version = "0.11", features = ["serde"] }
 dotenv         = "0.15"
 futures        = "0.3"
 hyper          = "0.14"
 lapin          = "2.1"
+lib-common     = { git = "https://github.com/Arrow-air/lib-common.git", tag = "v0.1.1-develop.2" }
 log            = "0.4"
-mavlink        = "0.10"
+mavlink        = "0.11"
 openssl        = "0.10"
 ordered-float  = { version = "3.4", features = ["serde"] }
 packed_struct  = "0.10"
@@ -38,17 +55,16 @@ prost-types    = "0.11"
 serde          = "1.0"
 serde_json     = "1.0"
 snafu          = "0.7"
-tokio          = { version = "1.20", features = ["full"] }
+tokio          = { version = "1.28", features = ["full"] }
 tokio-util     = "0.7"
 tonic          = "0.8"
 tonic-health   = "0.7"
 uuid           = { version = "1.2", features = ["serde"] }
 
 [dependencies.svc-storage-client-grpc]
-default-features = false
-features         = ["adsb"]
-git              = "https://github.com/Arrow-air/svc-storage"
-tag              = "v0.10.1-develop.0"
+features = ["adsb"]
+git      = "https://github.com/Arrow-air/svc-storage"
+tag      = "v0.10.1-develop.10"
 
 [dependencies.log4rs]
 features = [
@@ -63,10 +79,19 @@ version = "1.2"
 features = ["axum_extras", "chrono"]
 version  = "3.0"
 
+[dev-dependencies]
+deadpool = "0.9"
+logtest  = "2.0"
+
 [dev-dependencies.cargo-husky]
 default-features = false          # Disable features which are enabled by default
 features         = ["user-hooks"]
 version          = "1"
+
+# Make sure we enable the required modules when running tests
+[dev-dependencies.svc-telemetry]
+features = ["dev"]
+path     = "."
 
 [build-dependencies]
 tonic-build = "0.8"

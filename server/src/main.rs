@@ -1,41 +1,24 @@
 //! Main function starting the server and initializing dependencies.
 
-mod cache;
-mod config;
-mod grpc;
-mod rest;
-
 use clap::Parser;
 use log::info;
-use svc_telemetry::shutdown_signal;
-
-/// struct holding cli configuration options
-#[derive(Parser, Debug)]
-pub struct Cli {
-    /// Target file to write the OpenAPI Spec
-    #[arg(long)]
-    pub openapi: Option<String>,
-}
+use svc_telemetry::config::Config;
+use svc_telemetry::grpc;
+use svc_telemetry::rest;
+use svc_telemetry::Cli;
 
 #[tokio::main]
 #[cfg(not(tarpaulin_include))]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("(svc-telemetry) server startup.");
 
-    // Check for expected environment variables
-    let config = match config::Config::from_env() {
-        Ok(c) => c,
-        Err(e) => {
-            println!("(config) could not generate config: {}.", e);
-            panic!();
-        }
-    };
+    // Will use default config settings if no environment vars are found.
+    let config = Config::try_from_env().unwrap_or_default();
 
     // Start Logger
     let log_cfg: &str = config.log_config.as_str();
     if let Err(e) = log4rs::init_file(log_cfg, Default::default()) {
-        println!("(logger) could not parse {}: {}.", log_cfg, e);
-        panic!();
+        panic!("(logger) could not parse {}: {}.", log_cfg, e);
     }
 
     // Allow option to only generate the spec file to a given location
@@ -46,10 +29,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     // REST Server
-    tokio::spawn(rest::server::rest_server(config.clone()));
+    tokio::spawn(rest::server::rest_server(config.clone(), None));
 
     // GRPC Server
-    let _ = tokio::spawn(grpc::server::grpc_server(config)).await;
+    tokio::spawn(grpc::server::grpc_server(config, None)).await?;
 
     info!("(svc-telemetry) server shutdown.");
     Ok(())

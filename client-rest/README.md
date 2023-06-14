@@ -6,4 +6,4 @@
 ![Sanity Checks](https://github.com/arrow-air/svc-telemetry/actions/workflows/sanity_checks.yml/badge.svg?branch=develop) ![Python PEP8](https://github.com/arrow-air/svc-telemetry/actions/workflows/python_ci.yml/badge.svg?branch=develop) ![Rust Checks](https://github.com/arrow-air/svc-telemetry/actions/workflows/rust_ci.yml/badge.svg?branch=develop) 
 ![Arrow DAO Discord](https://img.shields.io/discord/853833144037277726?style=plastic)
 
-Exposes svc-telemetry gRPC client functions
+Exposes svc-telemetry REST API functions
