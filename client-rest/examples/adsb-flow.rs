@@ -1,9 +1,9 @@
 //! Simulates a flow of ADS-B with multiple reporters
 
-use dotenv;
 use futures_lite::stream::StreamExt;
 use hyper::StatusCode;
 use hyper::{Body, Client, Method, Request};
+use lib_common::grpc::get_endpoint_from_env;
 
 async fn mq_listener() -> Result<(), ()> {
     let mq_addr = format!("amqp://localhost:5672");
@@ -91,13 +91,12 @@ async fn adsb(url: String) {
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    dotenv::dotenv().ok();
+    println!("NOTE: Ensure the server is running, or this example will fail.");
 
-    let host = std::env::var("SERVER_HOSTNAME").unwrap_or_else(|_| "0.0.0.0".to_string());
-    let port = std::env::var("HOST_PORT_REST").unwrap_or_else(|_| "8011".to_string());
-
+    let (host, port) = get_endpoint_from_env("SERVER_HOSTNAME", "SERVER_PORT_REST");
     let url = format!("http://{host}:{port}");
-    println!("{url}");
+
+    println!("Rest endpoint set to [{url}].");
 
     tokio::spawn(mq_listener());
 

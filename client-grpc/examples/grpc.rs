@@ -2,7 +2,8 @@
 
 use lib_common::grpc::get_endpoint_from_env;
 use svc_telemetry_client_grpc::client::{ReadyRequest, RpcServiceClient};
-use svc_telemetry_client_grpc::{Client, ClientConnect, GrpcClient};
+use svc_telemetry_client_grpc::service::Client as ServiceClient;
+use svc_telemetry_client_grpc::{Client, GrpcClient};
 use tonic::transport::Channel;
 
 /// Example svc-telemetry-client-grpc
@@ -16,11 +17,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         connection.get_address()
     );
 
-    let response = connection
-        .get_client()
-        .await?
-        .is_ready(tonic::Request::new(ReadyRequest {}))
-        .await?;
+    let response = connection.is_ready(ReadyRequest {}).await?;
 
     println!("RESPONSE={:?}", response.into_inner());
 

@@ -1,14 +1,13 @@
 #![doc = include_str!("../README.md")]
 
-use clap::Parser;
-use log::warn;
-
+mod config;
+pub use crate::config::Config;
 pub mod amqp;
 pub mod cache;
-pub mod config;
 pub mod grpc;
 pub mod rest;
 
+pub use clap::Parser;
 /// struct holding cli configuration options
 #[derive(Parser, Debug)]
 pub struct Cli {
@@ -75,5 +74,5 @@ pub async fn shutdown_signal(
             .expect("(shutdown_signal) expect tokio signal ctrl-c"),
     }
 
-    warn!("(shutdown_signal) server shutdown for [{}]", server);
+    log::warn!("(shutdown_signal) server shutdown for [{}]", server);
 }
