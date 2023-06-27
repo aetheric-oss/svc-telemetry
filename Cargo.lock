@@ -3124,7 +3124,7 @@ dependencies = [
 
 [[package]]
 name = "svc-telemetry-client-rest"
-version = "0.1.1-develop.0"
+version = "0.1.0"
 dependencies = [
  "adsb_deku",
  "chrono",
