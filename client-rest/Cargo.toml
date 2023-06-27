@@ -1,5 +1,6 @@
 [package]
-description = "Types used for REST communication with the telemetry service."
+description = "Arrow telemetry service REST client"
+keywords    = ["vtol", "client", "rest", "telemetry"] # max 5
 name        = "svc-telemetry-client-rest"
 version     = "0.1.1-develop.0"
 
@@ -7,16 +8,12 @@ authors.workspace      = true
 categories.workspace   = true
 edition.workspace      = true
 homepage.workspace     = true
-keywords.workspace     = true
 license-file.workspace = true
 repository.workspace   = true
-
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
 adsb_deku     = "0.6"
 chrono        = { version = "0.4", features = ["serde"] }
-dotenv        = "0.15"
 futures-lite  = "1.13"
 lapin         = "2.1"
 mavlink       = "0.10"
@@ -27,9 +24,14 @@ serde_json    = "1.0"
 utoipa        = { version = "2.2", features = ["axum_extras"] }
 uuid          = { version = "1.2", features = ["serde"] }
 
-[[example]]
-name = "rest"
-
 [dev-dependencies]
 hyper = { version = "0.14", features = ["full"] }
 tokio = { version = "1.20", features = ["full"] }
+
+[dev-dependencies.lib-common]
+features = ["grpc"]
+git      = "https://github.com/Arrow-air/lib-common.git"
+tag      = "v0.1.1-develop.2"
+
+[[example]]
+name = "rest"

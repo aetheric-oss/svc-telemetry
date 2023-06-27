@@ -9,7 +9,7 @@ fn get_log_string(function: &str, name: &str) -> String {
         if #[cfg(feature = "stub_backends")] {
             return format!("({} MOCK) {} server.", function, name);
         } else {
-            return format!("({}) {} server.", function, name);
+            return format!("({}) {} client.", function, name);
         }
     }
 }
@@ -21,8 +21,6 @@ async fn test_client_requests_and_logs() {
     use svc_telemetry_client_grpc::service::Client as ServiceClient;
     use svc_telemetry_client_grpc::*;
     use tonic::transport::Channel;
-
-    std::env::set_var("RUST_LOG", "debug");
 
     let name = "telemetry";
     let (server_host, server_port) =
@@ -36,7 +34,7 @@ async fn test_client_requests_and_logs() {
 
     //test_is_ready_request_logs
     {
-        let result = client.is_ready(tonic::Request::new(ReadyRequest {})).await;
+        let result = client.is_ready(ReadyRequest {}).await;
         println!("{:?}", result);
         assert!(result.is_ok());
 

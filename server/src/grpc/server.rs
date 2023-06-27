@@ -7,8 +7,8 @@ pub mod grpc_server {
 pub use grpc_server::rpc_service_server::{RpcService, RpcServiceServer};
 pub use grpc_server::{ReadyRequest, ReadyResponse};
 
-use crate::config::Config;
 use crate::shutdown_signal;
+use crate::Config;
 
 use std::fmt::Debug;
 use std::net::SocketAddr;
@@ -27,7 +27,7 @@ impl RpcService for ServerImpl {
         &self,
         request: Request<ReadyRequest>,
     ) -> Result<Response<ReadyResponse>, Status> {
-        grpc_info!("(is_ready) telemetry.");
+        grpc_info!("(is_ready) telemetry server.");
         grpc_debug!("(is_ready) request: {:?}", request);
         let response = ReadyResponse { ready: true };
         Ok(Response::new(response))
@@ -39,7 +39,7 @@ impl RpcService for ServerImpl {
 /// # Example:
 /// ```
 /// use svc_telemetry::grpc::server::grpc_server;
-/// use svc_telemetry::config::Config;
+/// use svc_telemetry::Config;
 /// async fn example() -> Result<(), tokio::task::JoinError> {
 ///     let config = Config::default();
 ///     tokio::spawn(grpc_server(config, None)).await;

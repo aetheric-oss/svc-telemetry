@@ -1,12 +1,43 @@
+//! Integration Tests
+
+fn get_log_string(function: &str, name: &str) -> String {
+    #[cfg(feature = "stub_server")]
+    return format!("({} MOCK) {} server.", function, name);
+
+    #[cfg(not(feature = "stub_server"))]
+    return format!("({}) {} server.", function, name);
+}
+
 #[tokio::test]
-async fn test_grpc_server_start() {
-    use svc_telemetry::config::Config;
+async fn test_server_requests_and_logs() {
+    use logtest::Logger;
     use svc_telemetry::grpc::server::*;
 
-    let (shutdown_tx, shutdown_rx) = tokio::sync::oneshot::channel::<()>();
-    tokio::spawn(async move {
-        grpc_server(Config::default(), Some(shutdown_rx)).await;
-    });
+    let name = "telemetry";
 
-    shutdown_tx.send(()).expect("Could not stop server.");
+    // Start the logger.
+    let mut logger = Logger::start();
+
+    //test_is_ready_request_logs
+    {
+        let imp = ServerImpl::default();
+        let result = imp.is_ready(tonic::Request::new(ReadyRequest {})).await;
+        assert!(result.is_ok());
+        let result: ReadyResponse = result.unwrap().into_inner();
+        assert_eq!(result.ready, true);
+
+        // Search for the expected log message
+        let expected = get_log_string("is_ready", name);
+        println!("expected message: {}", expected);
+        assert!(logger.any(|log| {
+            if log.target().contains("app::") {
+                println!("{}", log.target());
+                let message = log.args();
+                println!("{:?}", message);
+                log.args() == expected
+            } else {
+                false
+            }
+        }));
+    }
 }
