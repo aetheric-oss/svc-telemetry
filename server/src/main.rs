@@ -1,11 +1,7 @@
 //! Main function starting the server and initializing dependencies.
 
-use clap::Parser;
 use log::info;
-use svc_telemetry::config::Config;
-use svc_telemetry::grpc;
-use svc_telemetry::rest;
-use svc_telemetry::Cli;
+use svc_telemetry::*;
 
 #[tokio::main]
 #[cfg(not(tarpaulin_include))]

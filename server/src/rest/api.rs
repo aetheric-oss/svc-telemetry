@@ -102,7 +102,7 @@ async fn handle_adsb(
     }
 
     // Send to svc-storage
-    let current_time = prost_types::Timestamp::from(SystemTime::now());
+    let current_time = svc_storage_client_grpc::Timestamp::from(SystemTime::now());
     let data = adsb::Data {
         icao_address: header_data.icao_address,
         message_type: header_data.message_type,
@@ -111,7 +111,7 @@ async fn handle_adsb(
     };
 
     // Make request
-    let request = tonic::Request::new(data);
+    let request = data;
     let client = &grpc_clients.storage.adsb;
 
     match client.insert(request).await {

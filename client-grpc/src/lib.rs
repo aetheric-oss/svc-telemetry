@@ -36,7 +36,7 @@ impl crate::service::Client<RpcServiceClient<Channel>> for GrpcClient<RpcService
 
     async fn is_ready(
         &self,
-        request: tonic::Request<Self::ReadyRequest>,
+        request: Self::ReadyRequest,
     ) -> Result<tonic::Response<Self::ReadyResponse>, tonic::Status> {
         grpc_info!("(is_ready) {} client.", self.get_name());
         grpc_debug!("(is_ready) request: {:?}", request);
@@ -51,7 +51,7 @@ impl crate::service::Client<RpcServiceClient<Channel>> for GrpcClient<RpcService
 
     async fn is_ready(
         &self,
-        request: tonic::Request<Self::ReadyRequest>,
+        request: Self::ReadyRequest,
     ) -> Result<tonic::Response<Self::ReadyResponse>, tonic::Status> {
         grpc_warn!("(is_ready MOCK) {} client.", self.get_name());
         grpc_debug!("(is_ready MOCK) request: {:?}", request);
@@ -60,7 +60,6 @@ impl crate::service::Client<RpcServiceClient<Channel>> for GrpcClient<RpcService
 }
 
 #[cfg(test)]
-
 mod tests {
     use crate::service::Client as ServiceClient;
 
@@ -93,7 +92,7 @@ mod tests {
             GrpcClient::new_client(&server_host, server_port, name);
         assert_eq!(client.get_name(), name);
 
-        let result = client.is_ready(tonic::Request::new(ReadyRequest {})).await;
+        let result = client.is_ready(ReadyRequest {}).await;
         println!("{:?}", result);
         assert!(result.is_ok());
         assert_eq!(result.unwrap().into_inner().ready, true);

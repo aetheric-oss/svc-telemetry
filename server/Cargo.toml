@@ -1,5 +1,6 @@
 [package]
 description = "Telemetry Service gRPC and REST servers"
+keywords    = ["vtol", "server", "grpc", "rest", "telemetry"] # max 5
 name        = "svc-telemetry"
 version     = "0.1.0"
 
@@ -7,7 +8,6 @@ authors.workspace      = true
 categories.workspace   = true
 edition.workspace      = true
 homepage.workspace     = true
-keywords.workspace     = true
 license-file.workspace = true
 repository.workspace   = true
 
@@ -47,7 +47,6 @@ lib-common     = { git = "https://github.com/Arrow-air/lib-common.git", tag = "v
 log            = "0.4"
 mavlink        = "0.11"
 openssl        = "0.10"
-ordered-float  = { version = "3.4", features = ["serde"] }
 packed_struct  = "0.10"
 prost          = "0.11"
 prost-build    = "0.11"
@@ -58,13 +57,15 @@ snafu          = "0.7"
 tokio          = { version = "1.28", features = ["full"] }
 tokio-util     = "0.7"
 tonic          = "0.8"
-tonic-health   = "0.7"
+tonic-health   = "0.8"
+tower          = { version = "0.4", features = ["limit"] }
+tower-http     = { version = "0.4", features = ["cors", "trace"] }
 uuid           = { version = "1.2", features = ["serde"] }
 
 [dependencies.svc-storage-client-grpc]
 features = ["adsb"]
 git      = "https://github.com/Arrow-air/svc-storage"
-tag      = "v0.10.1-develop.10"
+tag      = "v0.10.1-develop.16"
 
 [dependencies.log4rs]
 features = [
@@ -77,7 +78,7 @@ version = "1.2"
 
 [dependencies.utoipa]
 features = ["axum_extras", "chrono"]
-version  = "3.0"
+version  = "3.3"
 
 [dev-dependencies]
 deadpool = "0.9"

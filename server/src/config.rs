@@ -25,6 +25,13 @@ pub struct Config {
     pub redis: deadpool_redis::Config,
     /// path to log configuration YAML file
     pub log_config: String,
+    /// Rate limit - requests per second for REST requests
+    pub rest_request_limit_per_second: u8,
+    /// Enforces a limit on the concurrent number of requests the underlying service can handle
+    pub rest_concurrency_limit_per_service: u8,
+    /// Full url (including port number) to be allowed as request origin for
+    /// REST requests
+    pub rest_cors_allowed_origin: String,
 }
 
 impl Default for Config {
@@ -53,6 +60,9 @@ impl Config {
                 connection_properties: ConnectionProperties::default(),
             },
             log_config: String::from("log4rs.yaml"),
+            rest_request_limit_per_second: 2,
+            rest_concurrency_limit_per_service: 5,
+            rest_cors_allowed_origin: String::from("http://localhost:3000"),
         }
     }
 
@@ -60,11 +70,24 @@ impl Config {
     pub fn try_from_env() -> Result<Self, ConfigError> {
         // read .env file if present
         dotenv().ok();
+        let default_config = Config::default();
 
         config::Config::builder()
-            .set_default("docker_port_grpc", 50051)?
-            .set_default("docker_port_rest", 8000)?
-            .set_default("log_config", String::from("log4rs.yaml"))?
+            .set_default("docker_port_grpc", default_config.docker_port_grpc)?
+            .set_default("docker_port_rest", default_config.docker_port_rest)?
+            .set_default("log_config", default_config.log_config)?
+            .set_default(
+                "rest_concurrency_limit_per_service",
+                default_config.rest_concurrency_limit_per_service,
+            )?
+            .set_default(
+                "rest_request_limit_per_seconds",
+                default_config.rest_request_limit_per_second,
+            )?
+            .set_default(
+                "rest_cors_allowed_origin",
+                default_config.rest_cors_allowed_origin,
+            )?
             .add_source(Environment::default().separator("__"))
             .build()?
             .try_deserialize()
@@ -89,6 +112,12 @@ mod tests {
         assert!(config.redis.pool.is_none());
         assert!(config.redis.connection.is_none());
         assert_eq!(config.log_config, String::from("log4rs.yaml"));
+        assert_eq!(config.rest_concurrency_limit_per_service, 5);
+        assert_eq!(config.rest_request_limit_per_second, 2);
+        assert_eq!(
+            config.rest_cors_allowed_origin,
+            String::from("http://localhost:3000")
+        );
     }
     #[test]
     fn test_config_from_env() {
@@ -105,6 +134,12 @@ mod tests {
         std::env::set_var("REDIS__POOL__TIMEOUTS__WAIT__SECS", "2");
         std::env::set_var("REDIS__POOL__TIMEOUTS__WAIT__NANOS", "0");
         std::env::set_var("LOG_CONFIG", "config_file.yaml");
+        std::env::set_var("REST_CONCURRENCY_LIMIT_PER_SERVICE", "255");
+        std::env::set_var("REST_REQUEST_LIMIT_PER_SECOND", "255");
+        std::env::set_var(
+            "REST_CORS_ALLOWED_ORIGIN",
+            "https://allowed.origin.host:443",
+        );
         let config = Config::try_from_env();
         assert!(config.is_ok());
         let config = config.unwrap();
@@ -113,6 +148,12 @@ mod tests {
         assert_eq!(config.storage_port_grpc, 12345);
         assert_eq!(config.storage_host_grpc, String::from("test_host_grpc"));
         assert_eq!(config.log_config, String::from("config_file.yaml"));
+        assert_eq!(config.rest_concurrency_limit_per_service, 255);
+        assert_eq!(config.rest_request_limit_per_second, 255);
+        assert_eq!(
+            config.rest_cors_allowed_origin,
+            String::from("https://allowed.origin.host:443")
+        );
         assert_eq!(
             config.amqp.url,
             Some(String::from("amqp://test_rabbitmq:5672"))

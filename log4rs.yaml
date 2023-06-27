@@ -19,20 +19,6 @@ appenders:
         base: 1
     encoder:
       kind: json
-  cache_requests:
-    kind: rolling_file
-    path: "logs/cache_requests.log"
-    policy:
-      trigger:
-        kind: size
-        limit: 20mb
-      roller:
-        kind: fixed_window
-        pattern: logs/cache_requests_{}.gz
-        count: 5
-        base: 1
-    encoder:
-      kind: json
   rest_requests:
     kind: rolling_file
     path: "logs/rest_requests.log"
@@ -47,6 +33,18 @@ appenders:
         base: 1
     encoder:
       kind: json
+  backend_requests:
+    kind: rolling_file
+    path: "logs/backend_requests.log"
+    policy:
+      trigger:
+        kind: size
+        limit: 20mb
+      roller:
+        kind: fixed_window
+        pattern: logs/backend_requests_{}.gz
+        count: 5
+        base: 1
 
 root:
   level: info
@@ -54,14 +52,18 @@ root:
     - stdout
 
 loggers:
+  backend::cache:
+    level: debug
+    appenders:
+      - backend_requests
+  backend::amqp:
+    level: debug
+    appenders:
+      - backend_requests
   app::grpc:
     level: info
     appenders:
       - grpc_requests
-  app::cache:
-    level: debug
-    appenders:
-      - cache_requests
   app::rest:
     level: info
     appenders:
