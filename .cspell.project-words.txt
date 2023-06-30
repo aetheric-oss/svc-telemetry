@@ -53,4 +53,16 @@ logtest
 mavheader
 NANOS
 oneshot
+baro
+deque
+datetime
+coef
+powf
+dlat
+dlon
+callsign
+consts
+pset
+keyvals
+ringbuffer
 anstyle

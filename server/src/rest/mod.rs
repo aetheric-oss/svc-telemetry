@@ -11,8 +11,9 @@ use utoipa::OpenApi;
 #[derive(OpenApi)]
 #[openapi(
     paths(
-        api::mavlink_adsb,
-        api::adsb
+        api::mavlink::mavlink_adsb,
+        api::aircraft::aircraft_adsb,
+        api::health::health_check
     ),
     tags(
         (name = "svc-telemetry", description = "svc-telemetry REST API.")

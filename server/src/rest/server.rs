@@ -13,7 +13,10 @@ use axum::{
     http::{HeaderValue, StatusCode},
     routing, BoxError, Router,
 };
+use std::collections::VecDeque;
 use std::net::SocketAddr;
+use std::sync::{Arc, Mutex};
+use svc_gis_client_grpc::client::AircraftPosition;
 use tower::{
     buffer::BufferLayer,
     limit::{ConcurrencyLimitLayer, RateLimitLayer},
@@ -22,21 +25,21 @@ use tower::{
 use tower_http::cors::{Any, CorsLayer};
 use tower_http::trace::TraceLayer;
 
-/// Mavlink entries in the cache will expire after 60 seconds
-const CACHE_EXPIRE_MS_MAVLINK_ADSB: u32 = 5000;
-
-/// Mavlink entries in the cache will expire after 60 seconds
-const CACHE_EXPIRE_MS_AIRCRAFT_ADSB: u32 = 10000;
-
 /// Starts the REST API server for this microservice
 ///
 /// # Example:
 /// ```
 /// use svc_telemetry::rest::server::rest_server;
+/// use svc_telemetry::grpc::client::GrpcClients;
+/// use svc_gis_client_grpc::client::AircraftPosition;
 /// use svc_telemetry::Config;
+/// use std::collections::VecDeque;
+/// use std::sync::{Arc, Mutex};
 /// async fn example() -> Result<(), tokio::task::JoinError> {
 ///     let config = Config::default();
-///     tokio::spawn(rest_server(config, None)).await;
+///     let ring = Arc::new(Mutex::new(VecDeque::<AircraftPosition>::with_capacity(10)));
+///     let grpc_clients = GrpcClients::default(config.clone());
+///     tokio::spawn(rest_server(config, grpc_clients, ring, None)).await;
 ///     Ok(())
 /// }
 /// ```
@@ -45,6 +48,8 @@ const CACHE_EXPIRE_MS_AIRCRAFT_ADSB: u32 = 10000;
 // Will be tested in integration tests.
 pub async fn rest_server(
     config: Config,
+    grpc_clients: GrpcClients,
+    ring: Arc<Mutex<VecDeque<AircraftPosition>>>,
     shutdown_rx: Option<tokio::sync::oneshot::Receiver<()>>,
 ) -> Result<(), ()> {
     rest_info!("(rest_server) entry.");
@@ -90,13 +95,11 @@ pub async fn rest_server(
     //
     // Extensions
     //
-    // GRPC Clients
-    let grpc_clients = GrpcClients::default(config.clone());
 
     // Redis Pools
     let pools = RedisPools {
-        mavlink: RedisPool::new(config.clone(), "tlm:mav", CACHE_EXPIRE_MS_MAVLINK_ADSB).await?,
-        adsb: RedisPool::new(config.clone(), "tlm:adsb", CACHE_EXPIRE_MS_AIRCRAFT_ADSB).await?,
+        mavlink: RedisPool::new(config.clone(), "tlm:mav").await?,
+        adsb: RedisPool::new(config.clone(), "tlm:adsb").await?,
     };
 
     // RabbitMQ Channel
@@ -108,9 +111,15 @@ pub async fn rest_server(
     // Create Server
     //
     let app = Router::new()
-        .route("/health", routing::get(api::health_check))
-        .route("/telemetry/mavlink/adsb", routing::post(api::mavlink_adsb))
-        .route("/telemetry/aircraft/adsb", routing::post(api::adsb))
+        .route("/health", routing::get(api::health::health_check))
+        .route(
+            "/telemetry/mavlink/adsb",
+            routing::post(api::mavlink::mavlink_adsb),
+        )
+        .route(
+            "/telemetry/aircraft/adsb",
+            routing::post(api::aircraft::aircraft_adsb),
+        )
         .layer(
             CorsLayer::new()
                 .allow_origin(cors_allowed_origin)
@@ -120,7 +129,8 @@ pub async fn rest_server(
         .layer(limit_middleware)
         .layer(Extension(pools))
         .layer(Extension(mq_channel))
-        .layer(Extension(grpc_clients));
+        .layer(Extension(grpc_clients))
+        .layer(Extension(ring));
 
     //
     // Bind to address

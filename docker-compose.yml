@@ -56,6 +56,12 @@ services:
       - type: bind
         source: log4rs.yaml
         target: ${LOG_CONFIG}
+      - type: bind
+        source: logs/
+        target: /logs/
+      - type: bind
+        source: .env
+        target: /.env
     ports:
       - ${HOST_PORT_REST}:${DOCKER_PORT_REST}
       - ${HOST_PORT_GRPC}:${DOCKER_PORT_GRPC}
@@ -67,12 +73,25 @@ services:
     environment:
       - REDIS__URL
       - REDIS__POOL__MAX_SIZE
+      - REDIS__POOL__TIMEOUTS__WAIT__SECS
+      - REDIS__POOL__TIMEOUTS__WAIT__NANOS
       - STORAGE_HOST_GRPC
       - STORAGE_PORT_GRPC
-      - RABBITMQ_NODENAME
+      - GIS_PORT_GRPC
+      - GIS_HOST_GRPC
       - DOCKER_PORT_REST
       - DOCKER_PORT_GRPC
+      - AMQP__URL
+      - AMQP__POOL__MAX_SIZE
+      - AMQP__POOL__TIMEOUTS__WAIT__SECS
+      - AMQP__POOL__TIMEOUTS__WAIT__NANOS
       - LOG_CONFIG
+      - RINGBUFFER_SIZE_BYTES
+      - GIS_PUSH_CADENCE_MS
+      - GIS_MAX_MESSAGE_SIZE_BYTES
+      - REST_REQUEST_LIMIT_PER_SECOND
+      - REST_CONCURRENCY_LIMIT_PER_SERVICE
+      - REST_CORS_ALLOWED_ORIGIN
 
   example:
     links:
@@ -90,7 +109,7 @@ services:
         source: "${SOURCE_PATH}/.cargo/registry"
         target: "/usr/local/cargo/registry"
     environment:
-      - SERVER_HOSTNAME
+      - SERVER_HOSTNAME=web-server
       - SERVER_PORT_GRPC
       - SERVER_PORT_REST
       - EXAMPLE_TARGET
