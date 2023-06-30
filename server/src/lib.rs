@@ -2,12 +2,14 @@
 
 mod config;
 pub use crate::config::Config;
+pub mod adsb;
 pub mod amqp;
 pub mod cache;
 pub mod grpc;
 pub mod rest;
 
 pub use clap::Parser;
+
 /// struct holding cli configuration options
 #[derive(Parser, Debug)]
 pub struct Cli {
