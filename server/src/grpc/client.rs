@@ -1,12 +1,18 @@
 //! gRPC client helpers implementation
 
+use lib_common::grpc::{Client, GrpcClient};
+use svc_gis_client_grpc::client::rpc_service_client::RpcServiceClient as GisClient;
 use svc_storage_client_grpc::Clients;
+pub use tonic::transport::Channel;
 
 /// Struct to hold all gRPC client connections
 #[derive(Clone, Debug)]
 pub struct GrpcClients {
-    /// Svc-Storage ADS-B Client
+    /// svc-storage ADS-B Client
     pub storage: Clients,
+
+    /// svc-gis client
+    pub gis: GrpcClient<GisClient<Channel>>,
 }
 
 impl GrpcClients {
@@ -16,6 +22,11 @@ impl GrpcClients {
 
         GrpcClients {
             storage: storage_clients,
+            gis: GrpcClient::<GisClient<Channel>>::new_client(
+                &config.gis_host_grpc,
+                config.gis_port_grpc,
+                "gis",
+            ),
         }
     }
 }
@@ -33,5 +44,9 @@ mod tests {
         let adsb = &clients.storage.adsb;
         println!("{:?}", adsb);
         assert_eq!(adsb.get_name(), "adsb");
+
+        let gis = &clients.gis;
+        println!("{:?}", gis);
+        assert_eq!(gis.get_name(), "gis");
     }
 }

@@ -6,7 +6,7 @@ use hyper::{Body, Client, Method, Request};
 use lib_common::grpc::get_endpoint_from_env;
 
 async fn mq_listener() -> Result<(), ()> {
-    let mq_addr = format!("amqp://localhost:5672");
+    let mq_addr = format!("amqp://rabbitmq:5672");
 
     // Establish connection to RabbitMQ node
     println!("(mq_listener) connecting to MQ server at {}...", mq_addr);
@@ -58,12 +58,20 @@ async fn adsb(url: String) {
     // TODO(R4): different reporter ID
 
     let mut count: u8 = 0;
+    let mut odd_flag = 1;
     loop {
-        let payload: [u8; 14] = [
-            0x8D, 0x48, 0x40, 0xD6, 0x20, 0x2C, 0xC3, 0x71, 0xC3, 0x2C, 0xE0, 0x57, 0x60, count,
-        ];
+        // Using example from 3.1: https://airmetar.main.jp/radio/ADS-B%20Decoding%20Guide.pdf
+        let payload = match odd_flag {
+            0 => [
+                0x8D, 0x40, 0x62, 0x1D, 0x58, 0xC3, 0x82, 0xD6, 0x90, 0xC8, 0xAC, 0x28, 0x63, count,
+            ],
+            _ => [
+                0x8D, 0x40, 0x62, 0x1D, 0x58, 0xC3, 0x86, 0x43, 0x5C, 0xC4, 0x12, 0x69, 0x2A, count,
+            ],
+        };
 
         count += 1;
+        odd_flag = 1 - odd_flag;
 
         let req = Request::builder()
             .method(Method::POST)
@@ -99,6 +107,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("Rest endpoint set to [{url}].");
 
     tokio::spawn(mq_listener());
+
+    std::thread::sleep(std::time::Duration::from_secs(5));
 
     let reporters = 3;
     for _ in 0..reporters {

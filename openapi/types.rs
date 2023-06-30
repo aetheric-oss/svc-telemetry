@@ -49,6 +49,7 @@ impl Keys for Frame {
         self.crc
     }
 }
+
 #[cfg(test)]
 mod tests {
     use super::*;

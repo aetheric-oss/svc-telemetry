@@ -14,7 +14,6 @@ repository.workspace   = true
 [dependencies]
 adsb_deku     = "0.6"
 chrono        = { version = "0.4", features = ["serde"] }
-futures-lite  = "1.13"
 lapin         = "2.1"
 mavlink       = "0.10"
 ordered-float = { version = "3.4", features = ["serde"] }
@@ -25,8 +24,9 @@ utoipa        = { version = "2.2", features = ["axum_extras"] }
 uuid          = { version = "1.2", features = ["serde"] }
 
 [dev-dependencies]
-hyper = { version = "0.14", features = ["full"] }
-tokio = { version = "1.20", features = ["full"] }
+futures-lite = "1.13"
+hyper        = { version = "0.14", features = ["full"] }
+tokio        = { version = "1.20", features = ["full"] }
 
 [dev-dependencies.lib-common]
 features = ["grpc"]

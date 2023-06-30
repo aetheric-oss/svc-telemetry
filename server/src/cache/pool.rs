@@ -15,14 +15,11 @@ pub struct RedisPool {
     pool: Pool,
     /// The string prepended to the key being stored.
     key_folder: String,
-    /// The expiration time for keys in milliseconds.
-    expiration_ms: u32,
 }
 impl Debug for RedisPool {
     fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
         f.debug_struct("RedisPool")
             .field("key_folder", &self.key_folder)
-            .field("expiration_ms", &self.expiration_ms)
             .finish()
     }
 }
@@ -50,11 +47,7 @@ impl RedisPool {
     ///  This is used to differentiate keys inserted into Redis by different
     ///  microservices. For example, an ADS-B key in svc-telemetry might be
     ///  formatted `telemetry:adsb:1234567890`.
-    pub async fn new(
-        config: crate::config::Config,
-        key_folder: &str,
-        expiration_ms: u32,
-    ) -> Result<Self, ()> {
+    pub async fn new(config: crate::config::Config, key_folder: &str) -> Result<Self, ()> {
         // the .env file must have REDIS__URL="redis://\<host\>:\<port\>"
         let cfg: deadpool_redis::Config = config.redis;
         let Some(details) = cfg.url.clone() else {
@@ -73,7 +66,6 @@ impl RedisPool {
                 Ok(RedisPool {
                     pool,
                     key_folder: String::from(key_folder),
-                    expiration_ms,
                 })
             }
             Err(e) => {
@@ -87,14 +79,14 @@ impl RedisPool {
     /// If the key exists, increments the key and doesn't extend the expiration time.
     ///
     /// Returns the order in which this specific key was received (1 for first time).
-    pub async fn try_key(&mut self, key: u32) -> Result<u32, CacheError> {
+    pub async fn increment(&mut self, key: &str, expiration_ms: u32) -> Result<u32, CacheError> {
         let key = format!("{}:{}", &self.key_folder, key);
-        cache_info!("(try_key) entry with key {}.", &key);
+        cache_info!("(increment) entry with key {}.", &key);
 
         let mut connection = match self.pool.get().await {
             Ok(connection) => connection,
             Err(e) => {
-                cache_error!("(try_key) could not connect to redis deadpool: {e}");
+                cache_error!("(increment) could not connect to redis deadpool: {e}");
                 return Err(CacheError::CouldNotConnect);
             }
         };
@@ -107,7 +99,7 @@ impl RedisPool {
             // Set the expiration time
             .cmd("PEXPIRE")
             .arg(key)
-            .arg(self.expiration_ms)
+            .arg(expiration_ms)
             // .arg("NX") // only if it didn't have one before
             // (not implemented in `redis` crate yet: https://redis.io/commands/pexpire/)
             .ignore()
@@ -117,13 +109,13 @@ impl RedisPool {
             Ok(redis::Value::Bulk(val)) => val,
             Ok(value) => {
                 cache_error!(
-                    "(try_key) Operation failed, unexpected redis response: {:?}",
+                    "(increment) Operation failed, unexpected redis response: {:?}",
                     value
                 );
                 return Err(CacheError::OperationFailed);
             }
             Err(e) => {
-                cache_error!("(try_key) Operation failed, redis error: {}", e);
+                cache_error!("(increment) Operation failed, redis error: {}", e);
                 return Err(CacheError::OperationFailed);
             }
         };
@@ -132,13 +124,13 @@ impl RedisPool {
             Some(redis::Value::Int(new_value)) => new_value,
             Some(value) => {
                 cache_error!(
-                    "(try_key) Operation failed, unexpected redis response: {:?}",
+                    "(increment) Operation failed, unexpected redis response: {:?}",
                     value
                 );
                 return Err(CacheError::OperationFailed);
             }
             None => {
-                cache_error!("(try_key) Operation failed, empty redis response array.");
+                cache_error!("(increment) Operation failed, empty redis response array.");
                 return Err(CacheError::OperationFailed);
             }
         };
@@ -146,12 +138,111 @@ impl RedisPool {
         // Received value should be greater than 0, return a u32 type
         if new_value < 1 {
             cache_error!(
-                "(try_key) operation failed, unexpected value: {:?}",
+                "(increment) operation failed, unexpected value: {:?}",
                 new_value
             );
             return Err(CacheError::OperationFailed);
         }
 
         Ok(new_value as u32)
+    }
+
+    ///
+    /// Set the value of multiple keys
+    ///
+    pub async fn multiple_set(
+        &mut self,
+        keyvals: Vec<(String, String)>,
+        expiration_ms: u32,
+    ) -> Result<(), CacheError> {
+        let mut connection = match self.pool.get().await {
+            Ok(connection) => connection,
+            Err(e) => {
+                cache_error!("(get) could not connect to redis deadpool: {e}");
+                return Err(CacheError::CouldNotConnect);
+            }
+        };
+
+        let mut pipe = redis::pipe();
+        let mut pipe_ref = pipe.atomic();
+        for (key, value) in keyvals {
+            // Set the expiration time
+            pipe_ref = pipe_ref
+                .pset_ex(key, value, expiration_ms as usize)
+                .ignore();
+        }
+
+        match pipe.query_async(&mut connection).await {
+            Ok(redis::Value::Okay) => Ok(()),
+            Ok(value) => {
+                cache_error!(
+                    "(multiple_set) Operation failed, unexpected redis response: {:?}",
+                    value
+                );
+                Err(CacheError::OperationFailed)
+            }
+            Err(e) => {
+                cache_error!("(multiple_set) Operation failed, redis error: {}", e);
+                Err(CacheError::OperationFailed)
+            }
+        }
+    }
+
+    ///
+    /// Get the value of multiple keys
+    ///
+    pub async fn multiple_get<T: std::str::FromStr>(
+        &mut self,
+        keys: Vec<String>,
+    ) -> Result<Vec<T>, CacheError> {
+        let mut connection = match self.pool.get().await {
+            Ok(connection) => connection,
+            Err(e) => {
+                cache_error!("(get) could not connect to redis deadpool: {e}");
+                return Err(CacheError::CouldNotConnect);
+            }
+        };
+
+        let result = redis::pipe()
+            .atomic()
+            .mget(keys.join(" "))
+            .query_async(&mut connection)
+            .await;
+
+        match result {
+            Ok(redis::Value::Bulk(values)) => {
+                let values = values
+                    .iter()
+                    .filter_map(|value| match value {
+                        redis::Value::Data(data) => {
+                            T::from_str(&String::from_utf8(data.to_vec()).unwrap()).ok()
+                        }
+                        _ => None,
+                    })
+                    .collect::<Vec<T>>();
+
+                if values.len() != keys.len() {
+                    cache_error!(
+                        "(multiple_get) Operation failed, expected {} values, got {}.",
+                        keys.len(),
+                        values.len()
+                    );
+                    return Err(CacheError::OperationFailed);
+                }
+
+                Ok(values)
+            }
+            Ok(value) => {
+                cache_error!(
+                    "(multiple_set) Operation failed, unexpected redis response: {:?}",
+                    value
+                );
+                Err(CacheError::OperationFailed)
+            }
+            Err(e) => {
+                cache_error!("(multiple_set) Operation failed, redis error: {}", e);
+                Err(CacheError::OperationFailed)
+            }
+        }
     }
 }

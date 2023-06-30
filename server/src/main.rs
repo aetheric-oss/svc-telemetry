@@ -1,7 +1,12 @@
 //! Main function starting the server and initializing dependencies.
 
 use log::info;
+use std::collections::VecDeque;
+use std::sync::{Arc, Mutex};
+use svc_gis_client_grpc::client::AircraftPosition;
+use svc_telemetry::grpc::client::GrpcClients;
 use svc_telemetry::*;
+mod gis;
 
 #[tokio::main]
 #[cfg(not(tarpaulin_include))]
@@ -9,7 +14,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("(svc-telemetry) server startup.");
 
     // Will use default config settings if no environment vars are found.
-    let config = Config::try_from_env().unwrap_or_default();
+    let config = match Config::try_from_env() {
+        Ok(config) => config,
+        Err(e) => {
+            panic!(
+                "(svc-telemetry) could not parse config from environment: {}.",
+                e
+            );
+        }
+    };
 
     // Start Logger
     let log_cfg: &str = config.log_config.as_str();
@@ -24,8 +37,33 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         return rest::generate_openapi_spec(&target);
     }
 
+    // Initialize Ring Buffer
+    // Telemetry will also come over gRPC
+    let n_items = config.ringbuffer_size_bytes as usize / std::mem::size_of::<AircraftPosition>();
+    let ring = Arc::new(Mutex::new(VecDeque::<AircraftPosition>::with_capacity(
+        n_items,
+    )));
+
+    // GRPC Clients
+    let grpc_clients = GrpcClients::default(config.clone());
+
+    //
+    // Dump telemetry to svc-gis in bulk
+    //
+    tokio::spawn(gis::gis_batch_loop(
+        grpc_clients.clone(),
+        ring.clone(),
+        config.gis_push_cadence_ms,
+        config.gis_max_message_size_bytes,
+    ));
+
     // REST Server
-    tokio::spawn(rest::server::rest_server(config.clone(), None));
+    tokio::spawn(rest::server::rest_server(
+        config.clone(),
+        grpc_clients,
+        ring.clone(),
+        None,
+    ));
 
     // GRPC Server
     tokio::spawn(grpc::server::grpc_server(config, None)).await?;
