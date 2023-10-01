@@ -3,7 +3,7 @@
 use crate::grpc::client::GrpcClients;
 use axum::extract::Extension;
 use hyper::StatusCode;
-use svc_storage_client_grpc::ClientConnect;
+use lib_common::grpc::ClientConnect;
 
 /// Health check for load balancing
 #[utoipa::path(

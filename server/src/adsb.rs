@@ -80,7 +80,7 @@ fn nl(lat: f64) -> f64 {
 }
 
 /// Decodes the CPR format
-/// https://airmetar.main.jp/radio/ADS-B%20Decoding%20Guide.pdf
+/// <https://airmetar.main.jp/radio/ADS-B%20Decoding%20Guide.pdf>
 pub fn decode_cpr(
     lat_cpr_even: u32,
     lon_cpr_even: u32,

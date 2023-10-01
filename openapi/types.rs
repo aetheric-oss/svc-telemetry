@@ -38,7 +38,7 @@ impl Keys for Frame {
                 bytes[1..4].copy_from_slice(&adsb.icao.0);
                 bytes
             }
-            // TODO this shouldn't be reached. handle
+            // TODO(R4): this shouldn't be reached. handle
             _ => [0; 4],
         };
 

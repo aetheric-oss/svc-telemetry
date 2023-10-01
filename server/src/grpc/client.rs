@@ -33,7 +33,7 @@ impl GrpcClients {
 
 #[cfg(test)]
 mod tests {
-    use svc_storage_client_grpc::Client;
+    use svc_storage_client_grpc::prelude::*;
 
     use super::*;
 

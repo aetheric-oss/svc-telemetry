@@ -215,7 +215,14 @@ impl RedisPool {
                     .iter()
                     .filter_map(|value| match value {
                         redis::Value::Data(data) => {
-                            T::from_str(&String::from_utf8(data.to_vec()).unwrap()).ok()
+                            let Ok(str) = String::from_utf8(data.to_vec()) else {
+                                cache_error!(
+                                    "(multiple_get) Operation failed, could not parse redis response."
+                                );
+                                return None;
+                            };
+
+                            T::from_str(&str).ok()
                         }
                         _ => None,
                     })

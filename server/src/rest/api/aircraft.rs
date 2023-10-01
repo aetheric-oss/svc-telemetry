@@ -9,10 +9,9 @@ use crate::grpc::client::GrpcClients;
 use adsb_deku::adsb::ME::AirbornePositionBaroAltitude as Position;
 use adsb_deku::deku::DekuContainerRead;
 use adsb_deku::CPRFormat;
-use lib_common::time::datetime_to_timestamp;
 use svc_gis_client_grpc::client::{AircraftPosition, Coordinates};
+use svc_storage_client_grpc::prelude::*;
 use svc_storage_client_grpc::resources::adsb;
-use svc_storage_client_grpc::SimpleClient;
 
 use axum::{body::Bytes, extract::Extension, Json};
 use chrono::Utc;
@@ -72,11 +71,6 @@ pub async fn gis_position_push(
         return Err(());
     };
 
-    let Some(time) = datetime_to_timestamp(&Utc::now()) else {
-        rest_warn!("(gis_position_push) could not get current time.");
-        return Err(());
-    };
-
     let item = AircraftPosition {
         callsign: format!("{:x}", icao),
         location: Some(Coordinates {
@@ -84,7 +78,7 @@ pub async fn gis_position_push(
             longitude: longitude as f32,
         }),
         altitude_meters: decode_altitude(alt),
-        time: Some(time),
+        time: Some(Utc::now().into()),
         uuid: None,
     };
 

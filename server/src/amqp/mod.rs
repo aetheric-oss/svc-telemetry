@@ -84,7 +84,7 @@ cfg_if::cfg_if! {
                 if let Some(channel) = &self.channel {
                     channel.basic_publish(exchange, routing_key, options, payload, properties).await
                 } else {
-                    amqp_error!("(basic_publish) no channel set AMQPChannel");
+                    amqp_error!("(basic_publish) no channel set AMQPChannel.");
                     Err(lapin::Error::InvalidChannelState(lapin::ChannelState::Error))
                 }
             }

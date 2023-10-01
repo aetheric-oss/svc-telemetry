@@ -1,3 +1,4 @@
+use lib_common::grpc::ClientConnect;
 use log::{info, warn};
 use std::collections::VecDeque;
 use std::sync::{Arc, Mutex};
@@ -5,7 +6,7 @@ use std::thread::sleep;
 use std::time::{Duration, SystemTime};
 use svc_gis_client_grpc::client::AircraftPosition;
 use svc_gis_client_grpc::client::UpdateAircraftPositionRequest as PositionRequest;
-use svc_gis_client_grpc::{Client, ClientConnect};
+use svc_gis_client_grpc::prelude::Client;
 use svc_telemetry::grpc::client::GrpcClients;
 
 ///
