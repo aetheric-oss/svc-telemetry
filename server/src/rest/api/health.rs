@@ -24,15 +24,15 @@ pub async fn health_check(
 
     if grpc_clients.storage.adsb.get_client().await.is_err() {
         let error_msg = "svc-storage adsb unavailable".to_string();
-        rest_error!("(health_check adsb) {}.", &error_msg);
-        println!("(health_check adsb) {}.", &error_msg);
+        rest_error!("(health_check) {}.", &error_msg);
+        println!("(health_check) {}.", &error_msg);
         ok = false;
     }
 
     if grpc_clients.gis.get_client().await.is_err() {
         let error_msg = "svc-gis unavailable".to_string();
-        rest_error!("(health_check gis) {}.", &error_msg);
-        println!("(health_check gis) {}.", &error_msg);
+        rest_error!("(health_check) {}.", &error_msg);
+        println!("(health_check) {}.", &error_msg);
         ok = false;
     }
 

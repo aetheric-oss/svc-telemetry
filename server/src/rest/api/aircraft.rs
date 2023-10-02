@@ -85,14 +85,14 @@ pub async fn gis_position_push(
     match ring.lock() {
         Ok(mut ring) => {
             rest_debug!(
-                "(handle_adsb) pushing to ring buffer (items: {})",
+                "(gis_position_push) pushing to ring buffer (items: {})",
                 ring.len()
             );
             ring.push_back(item);
             Ok(())
         }
         _ => {
-            rest_warn!("(handle_adsb) could not push to ring buffer.");
+            rest_warn!("(gis_position_push) could not push to ring buffer.");
             Err(())
         }
     }

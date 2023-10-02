@@ -158,7 +158,7 @@ impl RedisPool {
         let mut connection = match self.pool.get().await {
             Ok(connection) => connection,
             Err(e) => {
-                cache_error!("(get) could not connect to redis deadpool: {e}");
+                cache_error!("(multiple_set) could not connect to redis deadpool: {e}");
                 return Err(CacheError::CouldNotConnect);
             }
         };
@@ -198,7 +198,7 @@ impl RedisPool {
         let mut connection = match self.pool.get().await {
             Ok(connection) => connection,
             Err(e) => {
-                cache_error!("(get) could not connect to redis deadpool: {e}");
+                cache_error!("(multiple_get) could not connect to redis deadpool: {e}");
                 return Err(CacheError::CouldNotConnect);
             }
         };
@@ -241,13 +241,13 @@ impl RedisPool {
             }
             Ok(value) => {
                 cache_error!(
-                    "(multiple_set) Operation failed, unexpected redis response: {:?}",
+                    "(multiple_get) Operation failed, unexpected redis response: {:?}",
                     value
                 );
                 Err(CacheError::OperationFailed)
             }
             Err(e) => {
-                cache_error!("(multiple_set) Operation failed, redis error: {}", e);
+                cache_error!("(multiple_get) Operation failed, redis error: {}", e);
                 Err(CacheError::OperationFailed)
             }
         }

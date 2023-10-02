@@ -18,7 +18,7 @@ pub async fn gis_batch_loop(
     cadence_ms: u16,
     max_message_size_bytes: u16,
 ) {
-    info!("(svc-telemetry) gis_batch_loop entry.");
+    info!("(gis_batch_loop) gis_batch_loop entry.");
 
     let cadence_ms = Duration::from_millis(cadence_ms as u64);
     let mut data = PositionRequest::default();
@@ -27,14 +27,14 @@ pub async fn gis_batch_loop(
 
     loop {
         let Ok(elapsed) = start.elapsed() else {
-            warn!("(svc-telemetry) Could not get elapsed time.");
+            warn!("(gis_batch_loop) Could not get elapsed time.");
             sleep(cadence_ms);
             continue;
         };
 
         if elapsed > cadence_ms {
             warn!(
-                "(svc-telemetry) elapsed time ({:?} ms) exceeds cadence ({:?} ms)",
+                "(gis_batch_loop) elapsed time ({:?} ms) exceeds cadence ({:?} ms)",
                 elapsed, cadence_ms
             );
         } else {
@@ -48,7 +48,7 @@ pub async fn gis_batch_loop(
         let mut client = match grpc_clients.gis.get_client().await {
             Ok(client) => client,
             Err(e) => {
-                warn!("(svc-telemetry) svc-gis client not available: {}", e);
+                warn!("(gis_batch_loop) svc-gis client not available: {}", e);
                 continue;
             }
         };
@@ -67,23 +67,23 @@ pub async fn gis_batch_loop(
         let request = tonic::Request::new(data.clone());
         match client.update_aircraft_position(request).await {
             Ok(_) => info!(
-                "(svc-telemetry) push to svc-gis succeeded: {} items.",
+                "(gis_batch_loop) push to svc-gis succeeded: {} items.",
                 data.aircraft.len()
             ),
             Err(e) => {
-                warn!("(svc-telemetry) push to svc-gis failed: {}.", e);
+                warn!("(gis_batch_loop) push to svc-gis failed: {}.", e);
                 grpc_clients.gis.invalidate().await;
                 continue;
             }
         }
 
         let Ok(elapsed) = start.elapsed() else {
-            warn!("(svc-telemetry) Could not get elapsed time.");
+            warn!("(gis_batch_loop) Could not get elapsed time.");
             continue;
         };
 
         info!(
-            "(svc-telemetry) push to svc-gis took {:?} milliseconds.",
+            "(gis_batch_loop) push to svc-gis took {:?} milliseconds.",
             elapsed
         );
     }

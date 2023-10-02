@@ -11,23 +11,20 @@ mod gis;
 #[tokio::main]
 #[cfg(not(tarpaulin_include))]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    println!("(svc-telemetry) server startup.");
+    println!("(main) server startup.");
 
     // Will use default config settings if no environment vars are found.
     let config = match Config::try_from_env() {
         Ok(config) => config,
         Err(e) => {
-            panic!(
-                "(svc-telemetry) could not parse config from environment: {}.",
-                e
-            );
+            panic!("(main) could not parse config from environment: {}.", e);
         }
     };
 
     // Start Logger
     let log_cfg: &str = config.log_config.as_str();
     if let Err(e) = log4rs::init_file(log_cfg, Default::default()) {
-        panic!("(logger) could not parse {}: {}.", log_cfg, e);
+        panic!("(main) could not parse {}: {}.", log_cfg, e);
     }
 
     // Allow option to only generate the spec file to a given location
@@ -68,6 +65,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // GRPC Server
     tokio::spawn(grpc::server::grpc_server(config, None)).await?;
 
-    info!("(svc-telemetry) server shutdown.");
+    info!("(main) server shutdown.");
     Ok(())
 }
