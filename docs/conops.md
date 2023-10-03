@@ -1,23 +1,24 @@
+![Arrow Banner](https://github.com/Arrow-air/tf-github/raw/main/src/templates/doc-banner-services.png)
+
 # Concept of Operations - `svc-telemetry`
 
-<center>
-
-<img src="https://github.com/Arrow-air/tf-github/raw/main/src/templates/doc-banner-services.png" style="height:250px" />
-
-</center>
-
-Attribute | Description
---- | ---
-Maintainer | [@Arrow-air/services](https://github.com/orgs/Arrow-air/teams)
-Stuckee | A.M. Smith (@ServiceDog)
-  
-## Overview
+## :telescope: Overview
 
 This microservice exposes a public API to record telemetry. It processes and moves telemetry to various storage platforms.
 
-This microservice additionally exposes interfaces to request recent aircraft telemetry. It streams processed telemetry to other microservices in need of up-to-date aircraft status (such as `svc-scheduler` and `svc-guidance`).
+This microservice additionally exposes interfaces to request recent aircraft
+telemetry. It streams processed telemetry to other microservices in need of
+up-to-date aircraft status (such as `svc-scheduler` and `svc-guidance`).
 
-## Related Documents
+### Metadata
+
+| Attribute     | Description                                                       |
+| ------------- |-------------------------------------------------------------------|
+| Maintainer(s) | [Services Team](https://github.com/orgs/Arrow-air/teams/services) |
+| Stuckee       | A.M. Smith ([@ServiceDog](https://github.com/servicedog))         |
+| Status        | Development                                                       |
+
+## :books: Related Documents
 
 Document | Description
 --- | ---
@@ -27,7 +28,7 @@ Document | Description
 [Interface Control Document (ICD) - `svc-telemetry`](./icd.md) | Defines the inputs and outputs of this microservice.
 [Software Design Document (SDD) - `svc-telemetry`](./sdd.md) | Specifies the internal activity of this microservice.
 
-## Motivation
+## :raised_hands: Motivation
 
 Live telemetry can be used to update itineraries, confirm departure and arrival, predict unsafe conditions, and inform a customer of flight status.
 

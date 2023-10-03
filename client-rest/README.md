@@ -8,4 +8,4 @@
 
 ## Overview
 
-Exposes svc-telemetry gRPC client functions
+Exposes svc-telemetry REST API functions

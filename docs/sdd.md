@@ -1,25 +1,26 @@
-# Software Design Document (SDD) - `svc-telemetry` 
+![Arrow Banner](https://github.com/Arrow-air/tf-github/raw/main/src/templates/doc-banner-services.png)
 
-<center>
+# Software Design Document (SDD) - `svc-telemetry`
 
-<img src="https://github.com/Arrow-air/tf-github/raw/main/src/templates/doc-banner-services.png" style="height:250px" />
-
-</center>
-
-## Overview
+## :telescope: Overview
 
 This document details the software implementation of the Arrow telemetry service.
 
-This service aggregates telemetry transmitted by networked assets (e.g. aircraft, drones, mobile vertiports, etc.) and rebroadcasts to listeners.
+This service aggregates telemetry transmitted by networked assets (e.g.
+aircraft, drones, mobile vertiports, etc.) and rebroadcasts to listeners.
 
-It implements a cache to filter out duplicate telemetry reports, such as an aircraft ADS-B message received by multiple networked towers within range.
+It implements a cache to filter out duplicate telemetry reports, such as an
+aircraft ADS-B message received by multiple networked towers within range.
 
-Attribute | Description
---- | ---
-Status | Development
-Stuckee | A.M. Smith ([@ServiceDog](https://github.com/ServiceDog))
+### Metadata
 
-## Related Documents
+| Attribute     | Description                                                       |
+| ------------- |-------------------------------------------------------------------|
+| Maintainer(s) | [Services Team](https://github.com/orgs/Arrow-air/teams/services) |
+| Stuckee       | A.M. Smith ([@ServiceDog](https://github.com/ServiceDog))         |
+| Status        | Development                                                       |
+
+## :books: Related Documents
 
 Document | Description
 --- | ---
@@ -29,14 +30,14 @@ Document | Description
 [Concept of Operations - `svc-telemetry`](./conops.md) | Defines the motivation and duties of this microservice.
 [Interface Control Document (ICD) - `svc-telemetry`](./icd.md) | Defines the inputs and outputs of this microservice.
 
-## Module Attributes
+## :dna: Module Attributes
 
 Attribute | Applies | Explanation
 --- | --- | ---
 Safety Critical | Y | Live telemetry instrumental to safe operations, especially for autonomous vehicles.
 Real-Time | Y | Telemetry broadcasts should be as close to realtime as possible, for safety concerns.
 
-## Logic
+## :gear: Logic
 
 ### Initialization
 
@@ -60,9 +61,9 @@ This information allows this service to connect to other microservices to obtain
 
 :exclamation: These environment variables will *not* default to anything if not found. In this case, requests involving the handler will result in a `503 SERVICE UNAVAILABLE`.
 
-For detailed sequence diagrams regarding request handlers, see [REST Handlers](#rest-handlers).
+For detailed sequence diagrams regarding request handlers, see [REST Handlers](#mailbox-rest-handlers).
 
-## REST Handlers
+## :mailbox: REST Handlers
 
 ### `adsb` Handler
 

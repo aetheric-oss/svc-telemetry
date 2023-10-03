@@ -1,6 +1,7 @@
 //! Example communication with this service
 use hyper::{client::connect::HttpConnector, Body, Client, Method, Request, Response};
 use hyper::{Error, StatusCode};
+use lib_common::grpc::get_endpoint_from_env;
 use svc_telemetry_client_rest::types::{MavFrame, MavMessage, MavlinkVersion, ADSB_VEHICLE_DATA};
 
 async fn evaluate(
@@ -129,7 +130,7 @@ async fn adsb(url: &str, client: &Client<HttpConnector>) {
 
     // POST /telemetry/mavlink/adsb NOMINAL
     println!(
-        "Send {} packets with different headers, expect \
+        "Send {} packets with different ICAO addresses, expect \
         response body value of 1 each time",
         max + 1
     );
@@ -201,11 +202,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         "NOTE: Ensure the server and redis containers are running, or this example will fail."
     );
 
-    let host = std::env::var("SERVER_HOSTNAME").unwrap_or_else(|_| "0.0.0.0".to_string());
-    let port = std::env::var("SERVER_PORT_REST").unwrap_or_else(|_| "8007".to_string());
-
+    let (host, port) = get_endpoint_from_env("SERVER_HOSTNAME", "SERVER_PORT_REST");
     let url = format!("http://{host}:{port}");
-    println!("{url}");
+
+    println!("Rest endpoint set to [{url}].");
+
     let client = Client::builder()
         .pool_idle_timeout(std::time::Duration::from_secs(10))
         .build_http();
