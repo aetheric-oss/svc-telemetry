@@ -1,3 +1,34 @@
+## [Release 0.2.0](https://github.com/Arrow-air/svc-telemetry/releases/tag/v0.2.0)
+
+### ✨ Features
+
+- add rabbitmq publish ([`d4efc9d`](https://github.com/Arrow-air/svc-telemetry/commit/d4efc9dcb42bdd1271a1d4b20c47500b4b1b7ade))
+- add mq listner on adsb-flow example ([`a0d0350`](https://github.com/Arrow-air/svc-telemetry/commit/a0d035053a3bee287d277d7255899db6fae444f7))
+- add svc-gis connection, refactor api ([`3328ec8`](https://github.com/Arrow-air/svc-telemetry/commit/3328ec8987cd0b2b25759d66d75fdcee92657f11))
+
+### 🐛 Fixes
+
+- move redis pools to struct ([`5217594`](https://github.com/Arrow-air/svc-telemetry/commit/521759434014dc0f9cc2a0d4268cb8dbd83a1691))
+
+### 🔥 Refactorings
+
+- use lib-common and new svc-storage-grpc-client ([`a6fa6a5`](https://github.com/Arrow-air/svc-telemetry/commit/a6fa6a5fb52d9b02880c534563f38db28cad61f0))
+- bring code in line with other services ([`334f667`](https://github.com/Arrow-air/svc-telemetry/commit/334f667e0e530bdd8951b1c0312dd5d083d0e37c))
+
+### 🛠 Maintenance
+
+- terraform provisioned file changes ([`a76b6e7`](https://github.com/Arrow-air/svc-telemetry/commit/a76b6e7fe36dcb5468886cb0784ac0870331268c))
+- add project words ([`5d5ecdc`](https://github.com/Arrow-air/svc-telemetry/commit/5d5ecdcf8ac383b6f50d3de24308bdd35c7f1110))
+- update release files ([`084c1ff`](https://github.com/Arrow-air/svc-telemetry/commit/084c1ffbba5476ca9fe76059ee70a7a0b83e8f86))
+- final r3 cleanup ([`b031d80`](https://github.com/Arrow-air/svc-telemetry/commit/b031d80e45c599a797f404fc2339043cf13cbf94))
+- reviewer comments ([`135b03a`](https://github.com/Arrow-air/svc-telemetry/commit/135b03ac98056b0f2a4b7cffe981e22b7b2a1800))
+- fix .dockerignore merge conflict ([`a123df6`](https://github.com/Arrow-air/svc-telemetry/commit/a123df6f059c20964140beb327306f5f7c395db1))
+
+### 📚 Documentation
+
+- update services banner ([`3072061`](https://github.com/Arrow-air/svc-telemetry/commit/3072061843499760cab11c7a44a65291975a6bf4))
+- fix heading and icons ([`48388da`](https://github.com/Arrow-air/svc-telemetry/commit/48388daec7b37f9761a046aefaede73401dbda01))
+
 ## [Release 0.1.0](https://github.com/Arrow-air/svc-telemetry/releases/tag/v0.1.0)
 
 ### ✨ Features

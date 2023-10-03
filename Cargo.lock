@@ -3379,7 +3379,7 @@ dependencies = [
 
 [[package]]
 name = "svc-telemetry"
-version = "0.1.1-develop.1"
+version = "0.2.0"
 dependencies = [
  "adsb_deku",
  "anstyle",
@@ -3428,7 +3428,7 @@ dependencies = [
 
 [[package]]
 name = "svc-telemetry-client-grpc"
-version = "0.1.1-develop.1"
+version = "0.2.0"
 dependencies = [
  "cfg-if",
  "lib-common",
@@ -3445,7 +3445,7 @@ dependencies = [
 
 [[package]]
 name = "svc-telemetry-client-rest"
-version = "0.1.1-develop.1"
+version = "0.2.0"
 dependencies = [
  "adsb_deku",
  "chrono",
