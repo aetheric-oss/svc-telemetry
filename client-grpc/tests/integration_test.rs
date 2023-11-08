@@ -18,23 +18,20 @@ fn get_log_string(function: &str, name: &str) -> String {
 async fn test_client_requests_and_logs() {
     use logtest::Logger;
 
-    use svc_telemetry_client_grpc::service::Client as ServiceClient;
-    use svc_telemetry_client_grpc::*;
-    use tonic::transport::Channel;
+    use svc_telemetry_client_grpc::prelude::*;
 
     let name = "telemetry";
     let (server_host, server_port) =
         lib_common::grpc::get_endpoint_from_env("GRPC_HOST", "GRPC_PORT");
 
-    let client: GrpcClient<RpcServiceClient<Channel>> =
-        GrpcClient::new_client(&server_host, server_port, name);
+    let client = TelemetryClient::new_client(&server_host, server_port, name);
 
     // Start the logger.
     let mut logger = Logger::start();
 
     //test_is_ready_request_logs
     {
-        let result = client.is_ready(ReadyRequest {}).await;
+        let result = client.is_ready(telemetry::ReadyRequest {}).await;
         println!("{:?}", result);
         assert!(result.is_ok());
 
