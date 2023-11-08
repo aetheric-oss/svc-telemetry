@@ -1,5 +1,6 @@
 [workspace]
-members = ["server", "client-grpc", "client-rest"]
+members  = ["server", "client-grpc", "client-rest"]
+resolver = "2"
 
 [workspace.package]
 authors      = ["A.M. Smith <amsmith@arrowair.com>"]

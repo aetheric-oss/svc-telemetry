@@ -3,7 +3,8 @@
 use crate::grpc::client::GrpcClients;
 use axum::extract::Extension;
 use hyper::StatusCode;
-use lib_common::grpc::ClientConnect;
+use svc_gis_client_grpc::prelude::*;
+use svc_storage_client_grpc::prelude::*;
 
 /// Health check for load balancing
 #[utoipa::path(
@@ -22,17 +23,26 @@ pub async fn health_check(
 
     let mut ok = true;
 
-    if grpc_clients.storage.adsb.get_client().await.is_err() {
-        let error_msg = "svc-storage adsb unavailable".to_string();
+    if grpc_clients
+        .storage
+        .adsb
+        .is_ready(ReadyRequest {})
+        .await
+        .is_err()
+    {
+        let error_msg = "svc-storage adsb unavailable.".to_string();
         rest_error!("(health_check) {}.", &error_msg);
-        println!("(health_check) {}.", &error_msg);
         ok = false;
     }
 
-    if grpc_clients.gis.get_client().await.is_err() {
+    if grpc_clients
+        .gis
+        .is_ready(gis::ReadyRequest {})
+        .await
+        .is_err()
+    {
         let error_msg = "svc-gis unavailable".to_string();
         rest_error!("(health_check) {}.", &error_msg);
-        println!("(health_check) {}.", &error_msg);
         ok = false;
     }
 

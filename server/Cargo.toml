@@ -21,9 +21,7 @@ mock = []
 # Will use a stubbed backend connection, only use for tests!
 stub_backends = [
   "svc-storage-client-grpc/stub_client",
-  "svc-storage-client-grpc/stub_backends",
   "svc-gis-client-grpc/stub_client",
-  "svc-gis-client-grpc/stub_backends",
 ]
 # Will implement stub functions for the server, only use for tests!
 stub_server = ["test_util"]
@@ -31,55 +29,50 @@ stub_server = ["test_util"]
 stub_client = ["stub_backends"]
 
 [dependencies]
-adsb_deku = "0.6"
-# Pin to specific version in R3, until Rust version is updated
-anstyle       = "=1.0.2"
-anstyle-parse = "=0.2.0"
-anyhow        = "1.0"
-axum          = "0.5"
-cargo-husky   = "1"
-cfg-if        = "1.0"
-chrono        = { version = "0.4", features = ["serde"] }
-# Pin to specific version in R3, until Rust version is updated
-clap           = { version = "=4.3.24", features = ["derive"] }
-clap_lex       = "=0.5.0"
+adsb_deku      = "0.6"
+anyhow         = "1.0"
+axum           = "0.6"
+cargo-husky    = "1"
+cfg-if         = "1.0"
+chrono         = { version = "0.4", features = ["serde"] }
+clap           = { version = "4.4", features = ["derive"] }
 config         = "0.13"
-deadpool-lapin = { version = "0.10", features = ["serde"] }
-deadpool-redis = { version = "0.12", features = ["serde"] }
+deadpool-lapin = { version = "0.11", features = ["serde"] }
+deadpool-redis = { version = "0.13", features = ["serde"] }
 dotenv         = "0.15"
 futures        = "0.3"
 hyper          = "0.14"
-lapin          = "2.1"
+lapin          = "2.3"
 log            = "0.4"
-mavlink        = "0.11"
+mavlink        = "0.12"
 openssl        = "0.10"
 packed_struct  = "0.10"
-prost          = "0.11"
-prost-build    = "0.11"
-prost-types    = "0.11"
+prost          = "0.12"
+prost-build    = "0.12"
+prost-types    = "0.12"
 serde          = "1.0"
 serde_json     = "1.0"
 snafu          = "0.7"
-tokio          = { version = "1.28", features = ["full"] }
+tokio          = { version = "1.33", features = ["full"] }
 tokio-util     = "0.7"
-tonic          = "0.8"
-tonic-health   = "0.8"
+tonic          = "0.10"
+tonic-health   = "0.10"
 tower          = { version = "0.4", features = ["limit"] }
 tower-http     = { version = "0.4", features = ["cors", "trace"] }
-uuid           = { version = "1.2", features = ["serde"] }
+uuid           = { version = "1.5", features = ["serde"] }
 
 [dependencies.svc-storage-client-grpc]
 features = ["adsb"]
 git      = "https://github.com/Arrow-air/svc-storage"
-tag      = "v0.11.0"
+tag      = "latest-develop"
 
 [dependencies.svc-gis-client-grpc]
 git = "https://github.com/Arrow-air/svc-gis"
-tag = "v0.1.0"
+tag = "latest-develop"
 
 [dependencies.lib-common]
 git = "https://github.com/Arrow-air/lib-common.git"
-tag = "v0.2.0"
+tag = "latest-develop"
 
 [dependencies.log4rs]
 features = [
@@ -92,10 +85,10 @@ version = "1.2"
 
 [dependencies.utoipa]
 features = ["axum_extras", "chrono"]
-version  = "3.3"
+version  = "4.0"
 
 [dev-dependencies]
-deadpool = "0.9"
+deadpool = "0.10"
 logtest  = "2.0"
 
 [dev-dependencies.cargo-husky]
@@ -109,4 +102,4 @@ features = ["dev"]
 path     = "."
 
 [build-dependencies]
-tonic-build = "0.8"
+tonic-build = "0.10"
