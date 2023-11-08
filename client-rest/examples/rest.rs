@@ -59,7 +59,8 @@ async fn mavlink(url: &str, client: &Client<HttpConnector>) {
                 protocol_version: MavlinkVersion::V2,
             };
 
-            let bytes = frame.ser();
+            let mut bytes = Vec::new();
+            frame.ser(&mut bytes);
             let req = Request::builder()
                 .method(Method::POST)
                 .uri(uri.clone())
@@ -86,7 +87,8 @@ async fn mavlink(url: &str, client: &Client<HttpConnector>) {
         protocol_version: MavlinkVersion::V2,
     };
 
-    let bytes = frame.ser();
+    let mut bytes = Vec::new();
+    frame.ser(&mut bytes);
 
     println!(
         "Send the most recent packet again a few more times, \

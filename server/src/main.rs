@@ -3,10 +3,8 @@
 use log::info;
 use std::collections::VecDeque;
 use std::sync::{Arc, Mutex};
-use svc_gis_client_grpc::client::AircraftPosition;
-use svc_telemetry::grpc::client::GrpcClients;
+use svc_gis_client_grpc::prelude::gis::AircraftPosition;
 use svc_telemetry::*;
-mod gis;
 
 #[tokio::main]
 #[cfg(not(tarpaulin_include))]
@@ -42,7 +40,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     )));
 
     // GRPC Clients
-    let grpc_clients = GrpcClients::default(config.clone());
+    let grpc_clients = grpc::client::GrpcClients::default(config.clone());
 
     //
     // Dump telemetry to svc-gis in bulk

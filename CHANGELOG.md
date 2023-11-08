@@ -3,7 +3,7 @@
 ### ✨ Features
 
 - add rabbitmq publish ([`d4efc9d`](https://github.com/Arrow-air/svc-telemetry/commit/d4efc9dcb42bdd1271a1d4b20c47500b4b1b7ade))
-- add mq listner on adsb-flow example ([`a0d0350`](https://github.com/Arrow-air/svc-telemetry/commit/a0d035053a3bee287d277d7255899db6fae444f7))
+- add mq listener on adsb-flow example ([`a0d0350`](https://github.com/Arrow-air/svc-telemetry/commit/a0d035053a3bee287d277d7255899db6fae444f7))
 - add svc-gis connection, refactor api ([`3328ec8`](https://github.com/Arrow-air/svc-telemetry/commit/3328ec8987cd0b2b25759d66d75fdcee92657f11))
 
 ### 🐛 Fixes
