@@ -68,7 +68,8 @@ tag      = "latest-develop"
 
 [dependencies.svc-gis-client-grpc]
 git = "https://github.com/Arrow-air/svc-gis"
-tag = "latest-develop"
+# tag = "latest-develop"
+branch = "am-smith/update-aircraft-location-interface"
 
 [dependencies.lib-common]
 git = "https://github.com/Arrow-air/lib-common.git"
