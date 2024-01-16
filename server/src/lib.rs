@@ -6,12 +6,12 @@ use tokio::sync::OnceCell;
 #[macro_use]
 pub mod test_util;
 
-pub mod adsb;
 pub mod amqp;
 pub mod cache;
 pub mod config;
 pub mod gis;
 pub mod grpc;
+pub mod msg;
 pub mod rest;
 
 pub use crate::config::Config;

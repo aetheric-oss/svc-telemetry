@@ -1,4 +1,5 @@
 //! gRPC client helpers implementation
+use svc_gis_client_grpc::prelude::Client;
 use svc_gis_client_grpc::prelude::GisClient;
 use svc_storage_client_grpc::prelude::{Client as StorageClient, Clients};
 use tokio::sync::OnceCell;

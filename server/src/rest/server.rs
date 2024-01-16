@@ -100,6 +100,7 @@ pub async fn rest_server(
     let pools = RedisPools {
         mavlink: RedisPool::new(config.clone(), "tlm:mav").await?,
         adsb: RedisPool::new(config.clone(), "tlm:adsb").await?,
+        netrid: RedisPool::new(config.clone(), "tlm:netrid").await?,
     };
 
     // RabbitMQ Channel
@@ -112,6 +113,10 @@ pub async fn rest_server(
     //
     let app = Router::new()
         .route("/health", routing::get(api::health::health_check))
+        .route(
+            "/telemetry/netrid",
+            routing::post(api::netrid::network_remote_id),
+        )
         .route(
             "/telemetry/mavlink/adsb",
             routing::post(api::mavlink::mavlink_adsb),

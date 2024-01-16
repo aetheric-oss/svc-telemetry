@@ -1,15 +1,15 @@
 //! Endpoints for updating aircraft positions
 
-use crate::adsb::{
-    decode_altitude, decode_cpr, get_adsb_icao_address, get_adsb_message_type, ADSB_SIZE_BYTES,
-};
 use crate::cache::pool::RedisPool;
 use crate::cache::RedisPools;
 use crate::grpc::client::GrpcClients;
+use crate::msg::adsb::{
+    decode_altitude, decode_cpr, get_adsb_icao_address, get_adsb_message_type, ADSB_SIZE_BYTES,
+};
 use adsb_deku::adsb::ME::AirbornePositionBaroAltitude as Position;
 use adsb_deku::deku::DekuContainerRead;
 use adsb_deku::CPRFormat;
-use svc_gis_client_grpc::client::{AircraftPosition, Coordinates};
+use svc_gis_client_grpc::client::{AircraftPosition, AircraftType, Coordinates};
 use svc_storage_client_grpc::prelude::*;
 use svc_storage_client_grpc::resources::adsb;
 
@@ -20,7 +20,7 @@ use std::cmp::Ordering;
 use std::collections::VecDeque;
 use std::sync::{Arc, Mutex};
 
-/// Mavlink entries in the cache will expire after 60 seconds
+/// ADSB entries in the cache will expire after 60 seconds
 const CACHE_EXPIRE_MS_AIRCRAFT_ADSB: u32 = 10000;
 
 /// CPR lat/lon entries in the cache will expire after 1 second
@@ -39,6 +39,7 @@ pub async fn gis_position_push(
     lon_cpr: u32,
     alt: u16,
     odd_flag: CPRFormat,
+    aircraft_type: AircraftType,
     mut pool: RedisPool,
     ring: Arc<Mutex<VecDeque<AircraftPosition>>>,
 ) -> Result<(), ()> {
@@ -72,13 +73,15 @@ pub async fn gis_position_push(
     };
 
     let item = AircraftPosition {
-        callsign: format!("{:x}", icao),
+        identifier: format!("{:x}", icao),
         location: Some(Coordinates {
-            latitude: latitude as f32,
-            longitude: longitude as f32,
+            latitude,
+            longitude,
         }),
+        aircraft_type: aircraft_type as i32,
         altitude_meters: decode_altitude(alt),
-        time: Some(Utc::now().into()),
+        timestamp_network: Some(Utc::now().into()),
+        timestamp_aircraft: None,
         uuid: None,
     };
 
@@ -182,6 +185,10 @@ pub async fn aircraft_adsb(
     // The odd/even flag is used to differentiate between two packets
     //  that are part of the same message.
     let icao = get_adsb_icao_address(&msg.icao.0);
+
+    // TODO(R4): Get the aircraft type from wake vortex category of ADS-b
+    // https://mode-s.org/decode/content/ads-b/2-identification.html
+    let aircraft_type = AircraftType::Undeclared;
     match msg.me {
         Position(adsb_deku::Altitude {
             odd_flag,
@@ -218,7 +225,18 @@ pub async fn aircraft_adsb(
                 }
             }
 
-            match gis_position_push(icao, lat_cpr, lon_cpr, alt, odd_flag, pools.adsb, ring).await {
+            match gis_position_push(
+                icao,
+                lat_cpr,
+                lon_cpr,
+                alt,
+                odd_flag,
+                aircraft_type,
+                pools.adsb,
+                ring,
+            )
+            .await
+            {
                 Ok(_) => rest_info!("(aircraft_adsb) pushed position to ring buffer."),
                 Err(_) => {
                     rest_error!("(aircraft_adsb) could not push position to ring buffer.");
@@ -226,6 +244,9 @@ pub async fn aircraft_adsb(
                 }
             }
         }
+        // TODO(R4): Add Aircraft ID message here
+        //  https://mode-s.org/decode/content/ads-b/2-identification.html
+        //  Update GIS to indicate what type of aircraft the ICAO address is
         _ => {
             // for now, reject non-position messages
             rest_info!("(aircraft_adsb) received an unrecognized message.");
