@@ -13,7 +13,7 @@ use utoipa::OpenApi;
     paths(
         api::netrid::network_remote_id,
         api::mavlink::mavlink_adsb,
-        api::aircraft::aircraft_adsb,
+        api::adsb::adsb,
         api::health::health_check
     ),
     tags(

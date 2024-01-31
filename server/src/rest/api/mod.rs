@@ -1,6 +1,6 @@
 //! API
 
-pub mod aircraft;
+pub mod adsb;
 pub mod health;
 pub mod mavlink;
 pub mod netrid;

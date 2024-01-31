@@ -1,9 +1,11 @@
 //! Main function starting the server and initializing dependencies.
 
+use crate::grpc::{start_batch_loops, Batch, BatchLoop};
 use log::info;
 use std::collections::VecDeque;
 use std::sync::{Arc, Mutex};
-use svc_gis_client_grpc::prelude::gis::AircraftPosition;
+use std::time::Duration;
+use svc_gis_client_grpc::prelude::gis::{AircraftId, AircraftPosition, AircraftVelocity};
 use svc_telemetry::*;
 
 #[tokio::main]
@@ -35,28 +37,32 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Initialize Ring Buffer
     // Telemetry will also come over gRPC
     let n_items = config.ringbuffer_size_bytes as usize / std::mem::size_of::<AircraftPosition>();
-    let ring = Arc::new(Mutex::new(VecDeque::<AircraftPosition>::with_capacity(
+    let position_ring = Arc::new(Mutex::new(VecDeque::<AircraftPosition>::with_capacity(
         n_items,
     )));
 
-    // GRPC Clients
-    let grpc_clients = grpc::client::GrpcClients::default(config.clone());
+    let velocity_ring = Arc::new(Mutex::new(VecDeque::<AircraftVelocity>::with_capacity(
+        n_items,
+    )));
 
-    //
-    // Dump telemetry to svc-gis in bulk
-    //
-    tokio::spawn(gis::gis_batch_loop(
-        grpc_clients.clone(),
-        ring.clone(),
-        config.gis_push_cadence_ms,
-        config.gis_max_message_size_bytes,
-    ));
+    let id_ring = Arc::new(Mutex::new(VecDeque::<AircraftId>::with_capacity(n_items)));
+
+    // svc-gis dump
+    start_batch_loops(
+        id_ring.clone(),
+        position_ring.clone(),
+        velocity_ring.clone(),
+        config.clone(),
+    );
+    let grpc_clients = grpc::client::GrpcClients::default(config.clone());
 
     // REST Server
     tokio::spawn(rest::server::rest_server(
         config.clone(),
         grpc_clients,
-        ring.clone(),
+        id_ring.clone(),
+        position_ring.clone(),
+        velocity_ring.clone(),
         None,
     ));
 

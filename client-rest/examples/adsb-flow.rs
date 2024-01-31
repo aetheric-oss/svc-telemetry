@@ -53,7 +53,7 @@ async fn adsb(url: String) {
         .pool_idle_timeout(std::time::Duration::from_secs(10))
         .build_http();
 
-    let uri = format!("{}/telemetry/aircraft/adsb", url);
+    let uri = format!("{}/telemetry/adsb", url);
 
     // TODO(R4): different reporter ID
 

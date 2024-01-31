@@ -3,7 +3,6 @@
 use chrono::{DateTime, Utc};
 use packed_struct::prelude::packed_bits::Bits;
 use packed_struct::prelude::*;
-use prost_types::source_code_info::Location; //{Integer, packed_bits::Bits, PackedStruct, PrimitiveEnum_u8};
 
 ///////////////////////////////////////////////
 // Field Enumerations
@@ -196,12 +195,12 @@ pub enum SpeedMultiplier {
 pub struct Header {
     /// Message Type (Mandatory)
     #[packed_field(size_bits = "4", ty = "enum")]
-    message_type: MessageType,
+    pub message_type: MessageType,
 
     /// Protocol Version (Mandatory)
     ///  See [`REMID_PROTOCOL_VERSION`] for default
     #[packed_field(size_bits = "4")]
-    protocol_version: u8,
+    pub protocol_version: u8,
 }
 
 impl Default for Header {
@@ -219,10 +218,10 @@ impl Default for Header {
 pub struct Frame {
     /// The frame header
     #[packed_field(size_bytes = "1")]
-    header: Header,
+    pub header: Header,
 
     /// The message body
-    message: [u8; 24],
+    pub message: [u8; 24],
 }
 
 ///////////////////////////////////////////////
@@ -248,17 +247,17 @@ pub enum Message {
 #[packed_struct(bit_numbering = "msb0", endian = "msb", size_bytes = "24")]
 pub struct BasicMessage {
     #[packed_field(size_bits = "4", ty = "enum")]
-    id_type: IdType,
+    pub id_type: IdType,
 
     /// Packet Version Number (Mandatory)
     #[packed_field(size_bits = "4", ty = "enum")]
-    ua_type: UaType,
+    pub ua_type: UaType,
 
     /// Telemetry or Command (Mandatory)
-    uas_id: [u8; 20],
+    pub uas_id: [u8; 20],
 
     // Reserved Field
-    reserved: [u8; 3],
+    pub reserved: [u8; 3],
 }
 
 /// Remote ID Location Message
@@ -266,79 +265,79 @@ pub struct BasicMessage {
 #[packed_struct(bit_numbering = "msb0", endian = "msb", size_bytes = "24")]
 pub struct LocationMessage {
     #[packed_field(size_bits = "4", ty = "enum")]
-    operational_status: OperationalStatus,
+    pub operational_status: OperationalStatus,
 
     #[packed_field(size_bits = "1")]
-    reserved_0: Integer<u8, Bits<1>>,
+    pub reserved_0: Integer<u8, Bits<1>>,
 
     #[packed_field(size_bits = "1", ty = "enum")]
-    height_type: HeightType,
+    pub height_type: HeightType,
 
     #[packed_field(size_bits = "1", ty = "enum")]
-    ew_direction: EastWestDirection,
+    pub ew_direction: EastWestDirection,
 
     #[packed_field(size_bits = "1", ty = "enum")]
-    speed_multiplier: SpeedMultiplier,
+    pub speed_multiplier: SpeedMultiplier,
 
     /// Track Direction measured clockwise from true North
     /// Add 180 to this value if EW Direction bit is set to 1 (facing west)
     /// (10 with EW Direction bit set to 0) == 10
     /// (10 with EW Direction bit set to 1) == 190
     #[packed_field(size_bytes = "1")]
-    track_direction: u8,
+    pub track_direction: u8,
 
     /// Encoded speed in meters per second
     #[packed_field(size_bytes = "1")]
-    speed: u8,
+    pub speed: u8,
 
     /// Encoded vertical rate in meters per second  
     /// + == up, - == down
     #[packed_field(size_bytes = "1")]
-    vertical_speed: i8,
+    pub vertical_speed: i8,
 
     /// Latitude
     #[packed_field(size_bytes = "4", endian = "lsb")]
-    latitude: i32,
+    pub latitude: i32,
 
     /// Longitude
     #[packed_field(size_bytes = "4", endian = "lsb")]
-    longitude: i32,
+    pub longitude: i32,
 
     /// Pressure altitude
     #[packed_field(size_bytes = "2", endian = "lsb")]
-    pressure_altitude: u16,
+    pub pressure_altitude: u16,
 
     /// Geodetic altitude
     #[packed_field(size_bytes = "2", endian = "lsb")]
-    geodetic_altitude: u16,
+    pub geodetic_altitude: u16,
 
     /// Height above takeoff or ground (see Height Type bit)
     #[packed_field(size_bytes = "2", endian = "lsb")]
-    height: u16,
+    pub height: u16,
 
     /// Vertical Accuracy
     #[packed_field(size_bits = "4", ty = "enum")]
-    vertical_accuracy: VerticalAccuracyMeters,
+    pub vertical_accuracy: VerticalAccuracyMeters,
 
     /// Horizontal Accuracy
     #[packed_field(size_bits = "4", ty = "enum")]
-    horizontal_accuracy: HorizontalAccuracyMeters,
+    pub horizontal_accuracy: HorizontalAccuracyMeters,
 
     /// Barometric Altitude
     #[packed_field(size_bits = "4", ty = "enum")]
-    barometric_altitude_accuracy: VerticalAccuracyMeters,
+    pub barometric_altitude_accuracy: VerticalAccuracyMeters,
 
     /// Speed Accuracy
     #[packed_field(size_bits = "4", ty = "enum")]
-    speed_accuracy: SpeedAccuracyMetersPerSecond,
+    pub speed_accuracy: SpeedAccuracyMetersPerSecond,
 
     /// Timestamp
     #[packed_field(size_bytes = "2", endian = "lsb")]
-    timestamp: u16,
+    pub timestamp: u16,
 
     /// Reserved Field
     #[packed_field(size_bits = "4")]
-    reserved_1: Integer<u8, Bits<4>>,
+    pub reserved_1: Integer<u8, Bits<4>>,
 
     /// Timestamp Accuracy
     /// Values 0-15
@@ -346,10 +345,10 @@ pub struct LocationMessage {
     /// Multiply value by 0.1 seconds for accuracy
     /// (possible values then 0.1 -> 1.5)
     #[packed_field(size_bits = "4")]
-    timestamp_accuracy: Integer<u8, Bits<4>>,
+    pub timestamp_accuracy: Integer<u8, Bits<4>>,
 
     #[packed_field(size_bytes = "1")]
-    reserved_2: u8,
+    pub reserved_2: u8,
 }
 
 #[derive(PartialEq, Debug)]
