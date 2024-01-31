@@ -16,7 +16,7 @@ use axum::{
 use std::collections::VecDeque;
 use std::net::SocketAddr;
 use std::sync::{Arc, Mutex};
-use svc_gis_client_grpc::client::AircraftPosition;
+use svc_gis_client_grpc::client::{AircraftId, AircraftPosition, AircraftVelocity};
 use tower::{
     buffer::BufferLayer,
     limit::{ConcurrencyLimitLayer, RateLimitLayer},
@@ -49,7 +49,9 @@ use tower_http::trace::TraceLayer;
 pub async fn rest_server(
     config: Config,
     grpc_clients: GrpcClients,
-    ring: Arc<Mutex<VecDeque<AircraftPosition>>>,
+    id_ring: Arc<Mutex<VecDeque<AircraftId>>>,
+    position_ring: Arc<Mutex<VecDeque<AircraftPosition>>>,
+    _velocity_ring: Arc<Mutex<VecDeque<AircraftVelocity>>>,
     shutdown_rx: Option<tokio::sync::oneshot::Receiver<()>>,
 ) -> Result<(), ()> {
     rest_info!("(rest_server) entry.");
@@ -121,10 +123,7 @@ pub async fn rest_server(
             "/telemetry/mavlink/adsb",
             routing::post(api::mavlink::mavlink_adsb),
         )
-        .route(
-            "/telemetry/aircraft/adsb",
-            routing::post(api::aircraft::aircraft_adsb),
-        )
+        .route("/telemetry/adsb", routing::post(api::adsb::adsb))
         .layer(
             CorsLayer::new()
                 .allow_origin(cors_allowed_origin)
@@ -135,7 +134,8 @@ pub async fn rest_server(
         .layer(Extension(pools))
         .layer(Extension(mq_channel))
         .layer(Extension(grpc_clients))
-        .layer(Extension(ring));
+        .layer(Extension(position_ring))
+        .layer(Extension(id_ring));
 
     //
     // Bind to address

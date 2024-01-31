@@ -77,7 +77,7 @@ sequenceDiagram
     participant service as svc-telemetry
     participant redis as Redis Cache
     participant storage as svc-storage
-    client-->>service: (REST) POST /telemetry/aircraft/adsb
+    client-->>service: (REST) POST /telemetry/adsb
     Note over service: Create key from ADS-B:<br>ICAO address and calculated CRC32
     service->>redis: INCR key<br>PEXPIRE KEY 5000
     Note over redis: If key doesn't exist,<br>inserts with a value of 1.

@@ -9,7 +9,6 @@ pub mod test_util;
 pub mod amqp;
 pub mod cache;
 pub mod config;
-pub mod gis;
 pub mod grpc;
 pub mod msg;
 pub mod rest;

@@ -127,7 +127,7 @@ async fn mavlink(url: &str, client: &Client<HttpConnector>) {
 }
 
 async fn adsb(url: &str, client: &Client<HttpConnector>) {
-    let uri = format!("{}/telemetry/aircraft/adsb", url);
+    let uri = format!("{}/telemetry/adsb", url);
     let max: u8 = 4;
 
     // POST /telemetry/mavlink/adsb NOMINAL
