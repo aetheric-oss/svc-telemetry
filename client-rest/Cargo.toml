@@ -15,7 +15,6 @@ repository.workspace   = true
 adsb_deku     = "0.6"
 chrono        = { version = "0.4", features = ["serde"] }
 lapin         = "2.3"
-mavlink       = "0.12"
 ordered-float = { version = "4.1", features = ["serde"] }
 packed_struct = "0.10"
 serde         = "1.0"

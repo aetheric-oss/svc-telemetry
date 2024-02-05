@@ -13,7 +13,6 @@ use utoipa::OpenApi;
     paths(
         api::jwt::login,
         api::netrid::network_remote_id,
-        api::mavlink::mavlink_adsb,
         api::adsb::adsb,
         api::health::health_check
     ),
