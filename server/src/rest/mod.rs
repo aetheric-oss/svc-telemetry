@@ -11,6 +11,7 @@ use utoipa::OpenApi;
 #[derive(OpenApi)]
 #[openapi(
     paths(
+        api::jwt::login,
         api::netrid::network_remote_id,
         api::mavlink::mavlink_adsb,
         api::adsb::adsb,

@@ -19,21 +19,42 @@ pub mod macros;
 pub mod client;
 pub mod server;
 
-#[derive(Clone)]
+/// gRPC batch loop, empty a ring buffer and push to gRPC at a
+///  given cadence and max message size.
+#[derive(Debug, Clone)]
 pub struct Batch<K> {
+    /// Name of the batch
     pub name: String,
+
+    /// gRPC clients
     pub grpc_clients: GrpcClients,
+
+    /// Ring buffer to read from
     pub ring: Arc<Mutex<VecDeque<K>>>,
+
+    /// Cadence in milliseconds
     pub cadence_ms: Duration,
+
+    /// Maximum message size in bytes
     pub max_message_size_bytes: u16,
 }
 
+/// Contains the getter functions necessary for a batch loop
 #[async_trait]
 pub trait IsBatch<T> {
+    /// Get the name of the batch
     fn get_name(&self) -> String;
+
+    /// Get the maximum message size in bytes
     fn get_max_message_size_bytes(&self) -> usize;
+
+    /// Get the cadence in milliseconds
     fn get_cadence_ms(&self) -> Duration;
+
+    /// Get the ring buffer
     fn get_ring(&self) -> Arc<Mutex<VecDeque<T>>>;
+
+    /// Get the maximum number of items
     fn get_max_items(&self) -> usize;
 }
 
@@ -59,9 +80,13 @@ impl<T> IsBatch<T> for Batch<T> {
     }
 }
 
+/// gRPC batch loop trait, can be started with periodic data pushes
 #[async_trait]
 pub trait BatchLoop<T>: IsBatch<T> {
+    /// Push the ring buffer to gRPC
     async fn push(&mut self) -> Result<(), ()>;
+
+    /// Start the batch loop
     async fn start(&mut self) {
         let name = self.get_name();
         grpc_info!("(gis_batch_loop_{name}) gis_batch_loop entry.");
@@ -205,12 +230,12 @@ impl BatchLoop<AircraftVelocity> for Batch<AircraftVelocity> {
     }
 }
 
-/// Starts the gRPC batch loops for this microservice
+/// Starts all of the gRPC batch loops for this microservice
 pub fn start_batch_loops(
     id_ring: Arc<Mutex<VecDeque<AircraftId>>>,
     position_ring: Arc<Mutex<VecDeque<AircraftPosition>>>,
     velocity_ring: Arc<Mutex<VecDeque<AircraftVelocity>>>,
-    config: crate::Config,
+    config: &crate::Config,
 ) {
     let grpc_clients_base = GrpcClients::default(config.clone());
 

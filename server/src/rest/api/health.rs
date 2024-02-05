@@ -2,6 +2,7 @@
 
 use crate::grpc::client::GrpcClients;
 use axum::extract::Extension;
+use axum::response::IntoResponse;
 use hyper::StatusCode;
 use svc_gis_client_grpc::prelude::*;
 use svc_storage_client_grpc::prelude::*;
@@ -18,7 +19,7 @@ use svc_storage_client_grpc::prelude::*;
 )]
 pub async fn health_check(
     Extension(grpc_clients): Extension<GrpcClients>,
-) -> Result<(), StatusCode> {
+) -> Result<impl IntoResponse, StatusCode> {
     rest_debug!("(health_check) entry.");
 
     let mut ok = true;

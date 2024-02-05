@@ -35,9 +35,14 @@ cargo test
 ### Build and Test
 
 To ensure consistent build and test outputs, Arrow provides a Docker image with all required software installed to build and test Rust projects.
+
 Using the Makefile, you can easily test and build your code.
 
 ```bash
+#
+# Append a JWT_SECRET variable to your .env file (NOT .env.base or .env.repo)
+#
+
 # Build Locally
 make rust-build
 

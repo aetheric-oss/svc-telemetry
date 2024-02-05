@@ -4,7 +4,7 @@
 //! Endpoints for updating aircraft positions
 
 use crate::cache::RedisPools;
-use crate::grpc::client::GrpcClients;
+// use crate::grpc::client::GrpcClients;
 use crate::msg::netrid::{
     BasicMessage, Frame, LocationMessage, MessageType, UaType as NetridAircraftType,
 };
@@ -92,10 +92,13 @@ pub async fn gis_position_push(
 
 /// Processes a basic remote id message type
 async fn process_basic_message(
+    _identifier: String,
     message: BasicMessage,
     id_ring: Arc<Mutex<VecDeque<AircraftId>>>,
 ) -> Result<(), StatusCode> {
     let aircraft_type = GisAircraftType::from(message.ua_type) as i32;
+
+    // TODO(R5): Compare the identifier given for the JWT with the identifier in the message
     let Ok(identifier) = String::from_utf8(message.uas_id.to_vec()) else {
         rest_warn!("(process_basic_message) could not parse identifier to string.");
         return Err(StatusCode::BAD_REQUEST);
@@ -126,18 +129,10 @@ async fn process_basic_message(
 
 /// Processes a basic remote id message type
 async fn process_location_message(
+    identifier: String,
     message: LocationMessage,
     position_ring: Arc<Mutex<VecDeque<AircraftPosition>>>,
 ) -> Result<(), StatusCode> {
-    // let Ok(identifier) = String::from_utf8(message.uas_id.to_vec()) else {
-    //     rest_warn!("(process_basic_message) could not parse identifier to string.");
-    //     return Err(StatusCode::BAD_REQUEST);
-    // };
-
-    // TODO(R4): Get identifier from authenticated signatures
-    //  in cache?
-    let identifier = "UNK".to_string();
-
     let Ok(altitude_meters) = message.decode_altitude() else {
         rest_warn!("(process_basic_message) could not parse altitude.");
         return Err(StatusCode::BAD_REQUEST);
@@ -192,11 +187,12 @@ async fn process_location_message(
 )]
 pub async fn network_remote_id(
     Extension(mut pools): Extension<RedisPools>,
-    Extension(_mq_channel): Extension<lapin::Channel>,
-    Extension(_grpc_clients): Extension<GrpcClients>,
+    // Extension(_mq_channel): Extension<lapin::Channel>,
+    // Extension(_grpc_clients): Extension<GrpcClients>,
     Extension(position_ring): Extension<Arc<Mutex<VecDeque<AircraftPosition>>>>,
     Extension(id_ring): Extension<Arc<Mutex<VecDeque<AircraftId>>>>,
     Extension(_velocity_ring): Extension<Arc<Mutex<VecDeque<AircraftVelocity>>>>,
+    Extension(identifier): Extension<String>,
     payload: Bytes,
 ) -> Result<Json<u32>, StatusCode> {
     rest_info!("(network_remote_id) entry.");
@@ -246,7 +242,7 @@ pub async fn network_remote_id(
                 return Err(StatusCode::BAD_REQUEST);
             };
 
-            process_basic_message(msg, id_ring).await?;
+            process_basic_message(identifier.clone(), msg, id_ring).await?;
         }
         crate::msg::netrid::MessageType::Location => {
             let Ok(msg) = LocationMessage::unpack(&frame.message) else {
@@ -254,7 +250,7 @@ pub async fn network_remote_id(
                 return Err(StatusCode::BAD_REQUEST);
             };
 
-            process_location_message(msg, position_ring).await?;
+            process_location_message(identifier.clone(), msg, position_ring).await?;
         }
         _ => {
             rest_warn!(
