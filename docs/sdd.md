@@ -96,32 +96,3 @@ Invalid request packets will return `400 BAD REQUEST`.
 **(adsb) Off-Nominal**: Redis Cache Error
 
 If there was an issue updating the Redis cache, the server will reply an opaque `500 INTERNAL_SERVER_ERROR`.
-
-
-### `mavlink_adsb` Handler
-
-The client will attempt to post a packet conforming to [Mavlink protocol](https://mavlink.io/en/guide/serialization.html) with an [ADS-B message payload](https://mavlink.io/en/messages/common.html#ADSB_VEHICLE).
-
-**(mavlink_adsb) Nominal**
-```mermaid
-sequenceDiagram
-    autonumber
-    participant client as Networked Node
-    participant service as svc-telemetry
-    participant redis as Redis Cache
-    participant storage as svc-storage
-    client-->>service: (REST) POST /telemetry/mavlink/adsb
-    Note over service: Create key from<br>mavlink header fields:<br>ICAO address and sequence number.
-    service->>redis: INCR key<br>PEXPIRE KEY 5000
-    Note over redis: If key doesn't exist,<br>inserts with a value of 1.
-    redis-->>service: N if N == (Value of this key in the cache)
-    service-->>client: (REST) Reply: N
-```
-
-**(mavlink_adsb) Off-Nominal**: Invalid packet
-
-Invalid request packets will return `400 BAD REQUEST`.
-
-**(mavlink_adsb) Off-Nominal**: Redis Cache Error
-
-If there was an issue updating the Redis cache, the server will reply an opaque `500 INTERNAL_SERVER_ERROR`.

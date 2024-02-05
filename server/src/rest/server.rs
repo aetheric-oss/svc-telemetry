@@ -103,7 +103,6 @@ pub async fn rest_server(
 
     // Redis Pools
     let pools = RedisPools {
-        mavlink: RedisPool::new(config.clone(), "tlm:mav").await?,
         adsb: RedisPool::new(config.clone(), "tlm:adsb").await?,
         netrid: RedisPool::new(config.clone(), "tlm:netrid").await?,
     };
@@ -135,7 +134,6 @@ pub async fn rest_server(
             post(api::netrid::network_remote_id)
                 .route_layer(axum::middleware::from_fn(crate::rest::api::jwt::auth)),
         )
-        .route("/telemetry/mavlink/adsb", post(api::mavlink::mavlink_adsb))
         .route("/telemetry/adsb", post(api::adsb::adsb))
         .layer(
             CorsLayer::new()

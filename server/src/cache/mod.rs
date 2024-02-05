@@ -10,8 +10,6 @@ pub mod pool;
 pub struct RedisPools {
     /// Network Remote ID pool
     pub netrid: pool::RedisPool,
-    /// Mavlink pool
-    pub mavlink: pool::RedisPool,
     /// ADSB pool
     pub adsb: pool::RedisPool,
 }
