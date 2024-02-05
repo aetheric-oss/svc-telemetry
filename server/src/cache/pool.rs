@@ -16,6 +16,7 @@ pub struct RedisPool {
     /// The string prepended to the key being stored.
     key_folder: String,
 }
+
 impl Debug for RedisPool {
     fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
         f.debug_struct("RedisPool")

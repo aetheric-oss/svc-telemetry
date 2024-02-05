@@ -9,7 +9,9 @@ use crate::msg::adsb::{
 use adsb_deku::adsb::ME::AirbornePositionBaroAltitude as Position;
 use adsb_deku::deku::DekuContainerRead;
 use adsb_deku::CPRFormat;
-use svc_gis_client_grpc::client::{AircraftId, AircraftPosition, AircraftType, PointZ};
+use svc_gis_client_grpc::client::{
+    AircraftId, AircraftPosition, AircraftType, AircraftVelocity, PointZ,
+};
 use svc_storage_client_grpc::prelude::*;
 use svc_storage_client_grpc::resources::adsb;
 
@@ -30,29 +32,33 @@ const CACHE_EXPIRE_MS_AIRCRAFT_CPR: u32 = 1000;
 ///  from unique senders before it is considered valid
 const N_REPORTERS_NEEDED: u32 = 1;
 
-///
-/// Pushes a position telemetry message to the ring buffer
-///
-pub async fn gis_position_push(
+struct GisPositionData {
     icao: u32,
     lat_cpr: u32,
     lon_cpr: u32,
     alt: u16,
     odd_flag: CPRFormat,
     aircraft_type: AircraftType,
+}
+
+///
+/// Pushes a position telemetry message to the ring buffer
+///
+async fn gis_position_push(
+    data: GisPositionData,
     mut pool: RedisPool,
     position_ring: Arc<Mutex<VecDeque<AircraftPosition>>>,
     id_ring: Arc<Mutex<VecDeque<AircraftId>>>,
 ) -> Result<(), ()> {
-    if odd_flag == CPRFormat::Odd {
+    if data.odd_flag == CPRFormat::Odd {
         rest_info!("(gis_position_push) received an odd flag CPR format message.");
         return Ok(()); // ignore even CPR format messages
     }
 
     // Get the even packet from the cache
     let keys = vec![
-        format!("{:x}:lat_cpr:{}", icao, CPRFormat::Odd as u8),
-        format!("{:x}:lon_cpr:{}", icao, CPRFormat::Odd as u8),
+        format!("{:x}:lat_cpr:{}", data.icao, CPRFormat::Odd as u8),
+        format!("{:x}:lon_cpr:{}", data.icao, CPRFormat::Odd as u8),
     ];
 
     let n_expected_results = keys.len();
@@ -68,19 +74,20 @@ pub async fn gis_position_push(
 
     let (e_lat_cpr, e_lon_cpr) = (results[0], results[1]);
 
-    let Ok((latitude, longitude)) = decode_cpr(e_lat_cpr, e_lon_cpr, lat_cpr, lon_cpr) else {
+    let Ok((latitude, longitude)) = decode_cpr(e_lat_cpr, e_lon_cpr, data.lat_cpr, data.lon_cpr)
+    else {
         rest_warn!("(gis_position_push) could not decode CPR.");
         return Err(());
     };
 
-    let identifier = format!("{:x}", icao);
+    let identifier = format!("{:x}", data.icao);
     let timestamp_network: Option<Timestamp> = Some(Utc::now().into());
     let item = AircraftPosition {
         identifier: identifier.clone(),
         geom: Some(PointZ {
             latitude,
             longitude,
-            altitude_meters: decode_altitude(alt),
+            altitude_meters: decode_altitude(data.alt),
         }),
         timestamp_network: timestamp_network.clone(),
         timestamp_aircraft: None,
@@ -104,7 +111,7 @@ pub async fn gis_position_push(
 
     let item = AircraftId {
         identifier,
-        aircraft_type: aircraft_type as i32,
+        aircraft_type: data.aircraft_type as i32,
         timestamp_network,
     };
 
@@ -150,8 +157,9 @@ pub async fn adsb(
     Extension(mut pools): Extension<RedisPools>,
     Extension(mq_channel): Extension<lapin::Channel>,
     Extension(grpc_clients): Extension<GrpcClients>,
-    Extension(position_ring): Extension<Arc<Mutex<VecDeque<AircraftPosition>>>>,
     Extension(id_ring): Extension<Arc<Mutex<VecDeque<AircraftId>>>>,
+    Extension(position_ring): Extension<Arc<Mutex<VecDeque<AircraftPosition>>>>,
+    Extension(_velocity_ring): Extension<Arc<Mutex<VecDeque<AircraftVelocity>>>>,
     payload: Bytes,
 ) -> Result<Json<u32>, StatusCode> {
     rest_info!("(adsb) entry.");
@@ -254,19 +262,16 @@ pub async fn adsb(
                 }
             }
 
-            match gis_position_push(
+            let data = GisPositionData {
                 icao,
                 lat_cpr,
                 lon_cpr,
                 alt,
                 odd_flag,
                 aircraft_type,
-                pools.adsb,
-                position_ring,
-                id_ring,
-            )
-            .await
-            {
+            };
+
+            match gis_position_push(data, pools.adsb, position_ring, id_ring).await {
                 Ok(_) => rest_info!("(adsb) pushed position to ring buffer."),
                 Err(_) => {
                     rest_error!("(adsb) could not push position to ring buffer.");

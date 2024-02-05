@@ -66,3 +66,15 @@ pset
 keyvals
 ringbuffer
 Refactorings
+netrid
+hybridlift
+captiveballoon
+freeballoon
+groundobstacle
+mtom
+unpowered
+rotorcraft
+aeroplane
+jsonwebtoken
+seccomp
+Lcov

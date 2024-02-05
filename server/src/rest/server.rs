@@ -11,7 +11,8 @@ use axum::{
     error_handling::HandleErrorLayer,
     extract::Extension,
     http::{HeaderValue, StatusCode},
-    routing, BoxError, Router,
+    routing::{get, post},
+    BoxError, Router,
 };
 use std::collections::VecDeque;
 use std::net::SocketAddr;
@@ -51,7 +52,7 @@ pub async fn rest_server(
     grpc_clients: GrpcClients,
     id_ring: Arc<Mutex<VecDeque<AircraftId>>>,
     position_ring: Arc<Mutex<VecDeque<AircraftPosition>>>,
-    _velocity_ring: Arc<Mutex<VecDeque<AircraftVelocity>>>,
+    velocity_ring: Arc<Mutex<VecDeque<AircraftVelocity>>>,
     shutdown_rx: Option<tokio::sync::oneshot::Receiver<()>>,
 ) -> Result<(), ()> {
     rest_info!("(rest_server) entry.");
@@ -110,20 +111,30 @@ pub async fn rest_server(
         .await
         .map_err(|_| rest_error!("(rest_server) could not create RabbitMQ Channel."));
 
+    // TODO(R5): Replace with PKI certificates
+    match crate::rest::api::jwt::JWT_SECRET.set(config.jwt_secret.clone()) {
+        Err(e) => {
+            rest_error!("(rest_server) could not set JWT_SECRET: {}", e);
+            return Err(());
+        }
+        _ => {
+            rest_info!("(rest_server) set JWT_SECRET.");
+        }
+    }
+
     //
     // Create Server
     //
     let app = Router::new()
-        .route("/health", routing::get(api::health::health_check))
+        .route("/health", get(api::health::health_check))
+        .route("/telemetry/login", get(crate::rest::api::jwt::login))
         .route(
             "/telemetry/netrid",
-            routing::post(api::netrid::network_remote_id),
+            post(api::netrid::network_remote_id)
+                .route_layer(axum::middleware::from_fn(crate::rest::api::jwt::auth)),
         )
-        .route(
-            "/telemetry/mavlink/adsb",
-            routing::post(api::mavlink::mavlink_adsb),
-        )
-        .route("/telemetry/adsb", routing::post(api::adsb::adsb))
+        .route("/telemetry/mavlink/adsb", post(api::mavlink::mavlink_adsb))
+        .route("/telemetry/adsb", post(api::adsb::adsb))
         .layer(
             CorsLayer::new()
                 .allow_origin(cors_allowed_origin)
@@ -134,12 +145,10 @@ pub async fn rest_server(
         .layer(Extension(pools))
         .layer(Extension(mq_channel))
         .layer(Extension(grpc_clients))
+        .layer(Extension(id_ring))
         .layer(Extension(position_ring))
-        .layer(Extension(id_ring));
+        .layer(Extension(velocity_ring));
 
-    //
-    // Bind to address
-    //
     match axum::Server::bind(&full_rest_addr)
         .serve(app.into_make_service())
         .with_graceful_shutdown(shutdown_signal("rest", shutdown_rx))

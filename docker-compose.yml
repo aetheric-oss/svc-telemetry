@@ -92,6 +92,7 @@ services:
       - REST_REQUEST_LIMIT_PER_SECOND
       - REST_CONCURRENCY_LIMIT_PER_SERVICE
       - REST_CORS_ALLOWED_ORIGIN
+      - JWT_SECRET
 
   example:
     links:
