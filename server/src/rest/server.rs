@@ -32,15 +32,17 @@ use tower_http::trace::TraceLayer;
 /// ```
 /// use svc_telemetry::rest::server::rest_server;
 /// use svc_telemetry::grpc::client::GrpcClients;
-/// use svc_gis_client_grpc::client::AircraftPosition;
+/// use svc_gis_client_grpc::client::{AircraftPosition, AircraftVelocity, AircraftId};
 /// use svc_telemetry::Config;
 /// use std::collections::VecDeque;
 /// use std::sync::{Arc, Mutex};
 /// async fn example() -> Result<(), tokio::task::JoinError> {
 ///     let config = Config::default();
-///     let ring = Arc::new(Mutex::new(VecDeque::<AircraftPosition>::with_capacity(10)));
+///     let id_ring = Arc::new(Mutex::new(VecDeque::<AircraftId>::with_capacity(10)));
+///     let position_ring = Arc::new(Mutex::new(VecDeque::<AircraftPosition>::with_capacity(10)));
+///     let velocity_ring = Arc::new(Mutex::new(VecDeque::<AircraftVelocity>::with_capacity(10)));
 ///     let grpc_clients = GrpcClients::default(config.clone());
-///     tokio::spawn(rest_server(config, grpc_clients, ring, None)).await;
+///     tokio::spawn(rest_server(config, grpc_clients, id_ring, position_ring, velocity_ring, None)).await;
 ///     Ok(())
 /// }
 /// ```

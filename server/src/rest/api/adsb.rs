@@ -4,11 +4,15 @@ use crate::cache::pool::RedisPool;
 use crate::cache::RedisPools;
 use crate::grpc::client::GrpcClients;
 use crate::msg::adsb::{
-    decode_altitude, decode_cpr, get_adsb_icao_address, get_adsb_message_type, ADSB_SIZE_BYTES,
+    decode_altitude, decode_cpr, decode_speed_direction, decode_vertical_speed,
+    get_adsb_icao_address, get_adsb_message_type, ADSB_SIZE_BYTES,
 };
 use adsb_deku::adsb::ME::AirbornePositionBaroAltitude as Position;
+use adsb_deku::adsb::ME::AirborneVelocity as Velocity;
+use adsb_deku::adsb::ME::AircraftIdentification as Identification;
+use adsb_deku::adsb::{AirborneVelocitySubType, GroundSpeedDecoding, TypeCoding};
 use adsb_deku::deku::DekuContainerRead;
-use adsb_deku::CPRFormat;
+use adsb_deku::{CPRFormat, Sign};
 use svc_gis_client_grpc::client::{
     AircraftId, AircraftPosition, AircraftType, AircraftVelocity, PointZ,
 };
@@ -32,13 +36,77 @@ const CACHE_EXPIRE_MS_AIRCRAFT_CPR: u32 = 1000;
 ///  from unique senders before it is considered valid
 const N_REPORTERS_NEEDED: u32 = 1;
 
+/// Data structure of encoded position data
 struct GisPositionData {
     icao: u32,
     lat_cpr: u32,
     lon_cpr: u32,
     alt: u16,
     odd_flag: CPRFormat,
-    aircraft_type: AircraftType,
+}
+
+/// Data structure of encoded velocity data
+struct GisVelocityData {
+    icao: u32,
+    st: u8,
+    ew_sign: Sign,
+    ew_vel: u16,
+    ns_sign: Sign,
+    ns_vel: u16,
+    // vrate_src: VerticalRateSource,
+    vrate_sign: Sign,
+    vrate_value: u16,
+    // gnss_sign: Sign,
+    // gnss_baro_diff: u16,
+}
+
+/// Pushes an aircraft identifier message to the ring buffer
+async fn gis_identifier_push(
+    identifier: String,
+    type_coding: TypeCoding,
+    aircraft_category: u8,
+    id_ring: Arc<Mutex<VecDeque<AircraftId>>>,
+) -> Result<(), ()> {
+    let aircraft_type: AircraftType = match (type_coding, aircraft_category) {
+        (TypeCoding::D, _) => AircraftType::Other,
+        (_, 0) => AircraftType::Other,
+        (TypeCoding::C, 1) => AircraftType::Other,
+        (TypeCoding::C, 3) => AircraftType::Other,
+        (TypeCoding::C, 4) => AircraftType::Groundobstacle,
+        (TypeCoding::C, 5) => AircraftType::Groundobstacle,
+        (TypeCoding::C, 6) => AircraftType::Groundobstacle,
+        (TypeCoding::C, 7) => AircraftType::Groundobstacle,
+        (TypeCoding::B, 1) => AircraftType::Glider,
+        (TypeCoding::B, 2) => AircraftType::Airship,
+        (TypeCoding::B, 3) => AircraftType::Unpowered,
+        (TypeCoding::B, 4) => AircraftType::Glider,
+        (TypeCoding::B, 5) => AircraftType::Other,
+        (TypeCoding::B, 7) => AircraftType::Rocket,
+        (TypeCoding::A, 7) => AircraftType::Rotorcraft,
+        // TODO(R5): Support other types
+        _ => AircraftType::Other,
+    };
+
+    let item = AircraftId {
+        identifier,
+        aircraft_type: aircraft_type as i32,
+        timestamp_network: Some(Utc::now().into()),
+    };
+
+    match id_ring.try_lock() {
+        Ok(mut ring) => {
+            rest_debug!(
+                "(gis_identifier_push) pushing to ID ring buffer (items: {})",
+                ring.len()
+            );
+            ring.push_back(item);
+            Ok(())
+        }
+        _ => {
+            rest_warn!("(gis_identifier_push) could not push to ID ring buffer.");
+            Err(())
+        }
+    }
 }
 
 ///
@@ -48,7 +116,6 @@ async fn gis_position_push(
     data: GisPositionData,
     mut pool: RedisPool,
     position_ring: Arc<Mutex<VecDeque<AircraftPosition>>>,
-    id_ring: Arc<Mutex<VecDeque<AircraftId>>>,
 ) -> Result<(), ()> {
     if data.odd_flag == CPRFormat::Odd {
         rest_info!("(gis_position_push) received an odd flag CPR format message.");
@@ -93,7 +160,7 @@ async fn gis_position_push(
         timestamp_aircraft: None,
     };
 
-    let mut ok = match position_ring.try_lock() {
+    match position_ring.try_lock() {
         Ok(mut ring) => {
             rest_debug!(
                 "(gis_position_push) pushing to position ring buffer (items: {})",
@@ -101,39 +168,58 @@ async fn gis_position_push(
             );
 
             ring.push_back(item);
-            true
+            Ok(())
         }
         _ => {
-            rest_warn!("(gis_position_push) could not push to position ring buffer.");
-            false
+            rest_warn!("(gis_position_push) could not push to one or more ring buffers.");
+            Err(())
         }
+    }
+}
+
+/// Pushes a velocity telemetry message to the ring buffer
+async fn gis_velocity_push(
+    data: GisVelocityData,
+    velocity_ring: Arc<Mutex<VecDeque<AircraftVelocity>>>,
+) -> Result<(), ()> {
+    let Ok((velocity_horizontal_ground_mps, track_angle_degrees)) = decode_speed_direction(
+        data.st,
+        data.ew_sign,
+        data.ew_vel,
+        data.ns_sign,
+        data.ns_vel,
+    ) else {
+        rest_info!("(adsb) could not decode speed and direction.");
+        return Err(());
     };
 
-    let item = AircraftId {
-        identifier,
-        aircraft_type: data.aircraft_type as i32,
-        timestamp_network,
+    let Ok(velocity_vertical_mps) = decode_vertical_speed(data.vrate_sign, data.vrate_value) else {
+        rest_info!("(adsb) could not decode vertical speed.");
+        return Err(());
     };
 
-    ok &= match id_ring.try_lock() {
+    let item = AircraftVelocity {
+        identifier: format!("{:x}", data.icao),
+        velocity_horizontal_ground_mps,
+        velocity_horizontal_air_mps: None,
+        velocity_vertical_mps,
+        track_angle_degrees,
+        timestamp_aircraft: None,
+        timestamp_network: Some(Utc::now().into()),
+    };
+
+    match velocity_ring.try_lock() {
         Ok(mut ring) => {
             rest_debug!(
-                "(gis_position_push) pushing to ID ring buffer (items: {})",
+                "(gis_velocity_push) pushing to velocity ring buffer (items: {})",
                 ring.len()
             );
+
             ring.push_back(item);
-            true
+            Ok(())
         }
         _ => {
-            rest_warn!("(gis_position_push) could not push to ID ring buffer.");
-            false
-        }
-    };
-
-    match ok {
-        true => Ok(()),
-        false => {
-            rest_warn!("(gis_position_push) could not push to one or more ring buffers.");
+            rest_warn!("(gis_velocity_push) could not push to velocity ring buffer.");
             Err(())
         }
     }
@@ -159,7 +245,7 @@ pub async fn adsb(
     Extension(grpc_clients): Extension<GrpcClients>,
     Extension(id_ring): Extension<Arc<Mutex<VecDeque<AircraftId>>>>,
     Extension(position_ring): Extension<Arc<Mutex<VecDeque<AircraftPosition>>>>,
-    Extension(_velocity_ring): Extension<Arc<Mutex<VecDeque<AircraftVelocity>>>>,
+    Extension(velocity_ring): Extension<Arc<Mutex<VecDeque<AircraftVelocity>>>>,
     payload: Bytes,
 ) -> Result<Json<u32>, StatusCode> {
     rest_info!("(adsb) entry.");
@@ -223,10 +309,16 @@ pub async fn adsb(
     //  that are part of the same message.
     let icao = get_adsb_icao_address(&msg.icao.0);
 
-    // TODO(R4): Get the aircraft type from wake vortex category of ADS-b
-    // https://mode-s.org/decode/content/ads-b/2-identification.html
-    let aircraft_type = AircraftType::Undeclared;
-    match msg.me {
+    match &msg.me {
+        Identification(adsb_deku::adsb::Identification { tc, ca, cn }) => {
+            match gis_identifier_push(cn.clone(), *tc, *ca, id_ring).await {
+                Ok(_) => rest_info!("(adsb) pushed position to ring buffer."),
+                Err(_) => {
+                    rest_error!("(adsb) could not push position to ring buffer.");
+                    return Err(StatusCode::INTERNAL_SERVER_ERROR);
+                }
+            }
+        }
         Position(adsb_deku::Altitude {
             odd_flag,
             lat_cpr,
@@ -264,14 +356,13 @@ pub async fn adsb(
 
             let data = GisPositionData {
                 icao,
-                lat_cpr,
-                lon_cpr,
-                alt,
-                odd_flag,
-                aircraft_type,
+                lat_cpr: *lat_cpr,
+                lon_cpr: *lon_cpr,
+                alt: *alt,
+                odd_flag: *odd_flag,
             };
 
-            match gis_position_push(data, pools.adsb, position_ring, id_ring).await {
+            match gis_position_push(data, pools.adsb, position_ring).await {
                 Ok(_) => rest_info!("(adsb) pushed position to ring buffer."),
                 Err(_) => {
                     rest_error!("(adsb) could not push position to ring buffer.");
@@ -279,9 +370,50 @@ pub async fn adsb(
                 }
             }
         }
-        // TODO(R4): Add Aircraft ID message here
-        //  https://mode-s.org/decode/content/ads-b/2-identification.html
-        //  Update GIS to indicate what type of aircraft the ICAO address is
+        Velocity(adsb_deku::adsb::AirborneVelocity {
+            st,
+            sub_type,
+            // vrate_src,
+            vrate_sign,
+            vrate_value,
+            // gnss_sign,
+            // gnss_baro_diff,
+            ..
+        }) => {
+            // TODO(R5): Add navigation uncertainty field
+            let AirborneVelocitySubType::GroundSpeedDecoding(GroundSpeedDecoding {
+                ew_sign,
+                ew_vel,
+                ns_sign,
+                ns_vel,
+            }) = sub_type
+            else {
+                rest_info!("(adsb) no ground speed in packet.");
+                return Err(StatusCode::NOT_IMPLEMENTED);
+            };
+
+            let data = GisVelocityData {
+                icao,
+                st: *st,
+                ew_sign: *ew_sign,
+                ew_vel: *ew_vel,
+                ns_sign: *ns_sign,
+                ns_vel: *ns_vel,
+                // vrate_src: *vrate_src,
+                vrate_sign: *vrate_sign,
+                vrate_value: *vrate_value,
+                // gnss_sign: *gnss_sign,
+                // gnss_baro_diff: *gnss_baro_diff,
+            };
+
+            match gis_velocity_push(data, velocity_ring).await {
+                Ok(_) => rest_info!("(adsb) pushed velocity to ring buffer."),
+                Err(_) => {
+                    rest_error!("(adsb) could not push velocity to ring buffer.");
+                    return Err(StatusCode::INTERNAL_SERVER_ERROR);
+                }
+            }
+        }
         _ => {
             // for now, reject non-position messages
             rest_info!("(adsb) received an unrecognized message.");

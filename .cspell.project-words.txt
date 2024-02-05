@@ -78,3 +78,5 @@ aeroplane
 jsonwebtoken
 seccomp
 Lcov
+vrate
+gnss

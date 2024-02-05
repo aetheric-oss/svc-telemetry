@@ -15,6 +15,7 @@ use svc_gis_client_grpc::client::{
 use axum::{body::Bytes, extract::Extension, Json};
 use chrono::Utc;
 use hyper::StatusCode;
+use lib_common::time::Timestamp;
 use packed_struct::PackedStruct;
 use std::cmp::Ordering;
 use std::collections::VecDeque;
@@ -132,20 +133,39 @@ async fn process_location_message(
     identifier: String,
     message: LocationMessage,
     position_ring: Arc<Mutex<VecDeque<AircraftPosition>>>,
+    velocity_ring: Arc<Mutex<VecDeque<AircraftVelocity>>>,
 ) -> Result<(), StatusCode> {
+    //
+    // TODO(R5): Decide what to do when a field is UNKNOWN
+    //  Reject the whole message? Use the 'unknown' value (e.g. 63.0 for vertical rate)?
+    //  What if only one field fails validation and the rest don't?
+    //
+
     let Ok(altitude_meters) = message.decode_altitude() else {
         rest_warn!("(process_basic_message) could not parse altitude.");
         return Err(StatusCode::BAD_REQUEST);
     };
 
+    let Ok(velocity_horizontal_ground_mps) = message.decode_speed() else {
+        rest_warn!("(process_basic_message) could not parse speed.");
+        return Err(StatusCode::BAD_REQUEST);
+    };
+
+    let Ok(velocity_vertical_mps) = message.decode_vertical_speed() else {
+        rest_warn!("(process_basic_message) could not parse vertical speed.");
+        return Err(StatusCode::BAD_REQUEST);
+    };
+
+    let timestamp_aircraft: Option<Timestamp> = match message.decode_timestamp() {
+        Ok(ts) => Some(ts.into()),
+        Err(_) => None,
+    };
+
     let latitude = message.decode_latitude();
     let longitude = message.decode_longitude();
 
-    // TODO(R4)
-    // let timestamp = message.decode_timestamp();
-
-    let item = AircraftPosition {
-        identifier,
+    let position_item = AircraftPosition {
+        identifier: identifier.clone(),
         geom: Some(PointZ {
             latitude,
             longitude,
@@ -155,6 +175,16 @@ async fn process_location_message(
         timestamp_aircraft: None,
     };
 
+    let velocity_item = AircraftVelocity {
+        identifier,
+        velocity_vertical_mps,
+        velocity_horizontal_ground_mps,
+        velocity_horizontal_air_mps: None,
+        track_angle_degrees: message.decode_direction() as f32,
+        timestamp_aircraft,
+        timestamp_network: Some(Utc::now().into()),
+    };
+
     match position_ring.try_lock() {
         Ok(mut ring) => {
             rest_debug!(
@@ -162,7 +192,22 @@ async fn process_location_message(
                 ring.len()
             );
 
-            ring.push_back(item);
+            ring.push_back(position_item);
+        }
+        _ => {
+            rest_warn!("(process_basic_message) could not push to ring buffer.");
+            return Err(StatusCode::INTERNAL_SERVER_ERROR);
+        }
+    }
+
+    match velocity_ring.try_lock() {
+        Ok(mut ring) => {
+            rest_debug!(
+                "(process_basic_message) pushing to ring buffer (items: {})",
+                ring.len()
+            );
+
+            ring.push_back(velocity_item);
             Ok(())
         }
         _ => {
@@ -191,7 +236,7 @@ pub async fn network_remote_id(
     // Extension(_grpc_clients): Extension<GrpcClients>,
     Extension(position_ring): Extension<Arc<Mutex<VecDeque<AircraftPosition>>>>,
     Extension(id_ring): Extension<Arc<Mutex<VecDeque<AircraftId>>>>,
-    Extension(_velocity_ring): Extension<Arc<Mutex<VecDeque<AircraftVelocity>>>>,
+    Extension(velocity_ring): Extension<Arc<Mutex<VecDeque<AircraftVelocity>>>>,
     Extension(identifier): Extension<String>,
     payload: Bytes,
 ) -> Result<Json<u32>, StatusCode> {
@@ -250,7 +295,7 @@ pub async fn network_remote_id(
                 return Err(StatusCode::BAD_REQUEST);
             };
 
-            process_location_message(identifier.clone(), msg, position_ring).await?;
+            process_location_message(identifier.clone(), msg, position_ring, velocity_ring).await?;
         }
         _ => {
             rest_warn!(
