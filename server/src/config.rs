@@ -217,7 +217,7 @@ mod tests {
             Some(String::from("redis://test_redis:6379"))
         );
         assert!(config.redis.pool.is_some());
-        assert!(config.jwt_secret, String::from("TEST_SECRET"));
+        assert_eq!(config.jwt_secret, String::from("TEST_SECRET"));
 
         ut_info!("(test_config_from_env) Success.");
     }

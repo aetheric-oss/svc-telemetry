@@ -1,6 +1,6 @@
 //! Functions for parsing ADS-B packets
 
-use std::f64::consts::PI;
+use adsb_deku::Sign;
 
 /// Expected size of ADSB packets
 pub const ADSB_SIZE_BYTES: usize = 14;
@@ -10,6 +10,9 @@ pub const ADSB_SIZE_BYTES: usize = 14;
 pub enum DecodeError {
     /// The latitudes of a packet pair are in different zones
     CrossedLatitudeZones,
+
+    /// Invalid Aircraft Subtype (subtype is not 1 or 2)
+    InvalidSubtype,
 }
 
 /// Convert the ICAO field to a u32
@@ -50,6 +53,7 @@ fn modulus(x: f64, y: f64) -> f64 {
 ///
 /// Assuming number of zones (NZ) is 15 for Mode-S CPR encoding.
 fn nl(lat: f64) -> f64 {
+    use std::f64::consts::PI;
     const NZ: f64 = 30.; // NZ * 2
 
     //
@@ -131,6 +135,78 @@ pub fn decode_cpr(
     Ok((latitude, longitude))
 }
 
+/// Decodes the speed and direction of an aircraft
+/// <https://airmetar.main.jp/radio/ADS-B%20Decoding%20Guide.pdf>
+pub fn decode_speed_direction(
+    st: u8,
+    ew_sign: Sign,
+    ew_vel: u16,
+    ns_sign: Sign,
+    ns_vel: u16,
+) -> Result<(f32, f32), DecodeError> {
+    use std::f32::consts::PI;
+    static DIRECTION_COEFFICIENT: f32 = 360. / (2. * PI);
+
+    // Sign: 0 = positive, 1 = negative
+    let ew_vel: i32 = ew_vel as i32;
+    let ns_vel: i32 = ns_vel as i32;
+
+    let (vx, vy) = match st {
+        1 => {
+            let vx = match ew_sign {
+                Sign::Positive => ew_vel - 1,
+                Sign::Negative => -(ew_vel - 1),
+            };
+
+            let vy = match ns_sign {
+                Sign::Positive => ns_vel - 1,
+                Sign::Negative => -(ns_vel - 1),
+            };
+
+            (vx, vy)
+        }
+        2 => {
+            let vx = match ew_sign {
+                Sign::Positive => 4 * (ew_vel - 1),
+                Sign::Negative => -4 * (ew_vel - 1),
+            };
+
+            let vy = match ns_sign {
+                Sign::Positive => 4 * (ns_vel - 1),
+                Sign::Negative => -4 * (ns_vel - 1),
+            };
+
+            (vx, vy)
+        }
+        _ => return Err(DecodeError::InvalidSubtype),
+    };
+
+    let speed_knots = ((vx.pow(2) + vy.pow(2)) as f32).sqrt();
+    let speed_mps = speed_knots * 0.514444;
+    let mut direction = (vx as f32).atan2(vy as f32) * DIRECTION_COEFFICIENT;
+
+    if direction < 0. {
+        direction += 360.;
+    }
+
+    Ok((speed_mps, direction))
+}
+
+/// Decodes the vertical speed of an aircraft
+/// <https://airmetar.main.jp/radio/ADS-B%20Decoding%20Guide.pdf>
+pub fn decode_vertical_speed(vrate_sign: Sign, vrate_value: u16) -> Result<f32, DecodeError> {
+    // Sign: positive = 0, negative = 1
+    // 0 = climb, 1 = descend
+    let vrate_value = vrate_value as i32;
+    let speed_ftps = match vrate_sign {
+        Sign::Positive => 64 * (vrate_value - 1),
+        Sign::Negative => -64 * (vrate_value - 1),
+    };
+
+    let speed_mps = speed_ftps as f32 * 0.3048;
+    Ok(speed_mps)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -172,5 +248,36 @@ mod tests {
         let altitude = decode_altitude(alt);
 
         assert!((altitude - expected_meters).abs() < 0.001);
+    }
+
+    #[test]
+    fn ut_decode_vertical_speed() {
+        let speed = decode_vertical_speed(Sign::Negative, 14).unwrap();
+        let expected_speed = -832.0 * 0.3048; // ftps -> m/s
+
+        println!("(ut_decode_vertical_speed) speed: {speed}",);
+        assert!((speed - expected_speed).abs() < 0.01);
+
+        let speed = decode_vertical_speed(Sign::Negative, 37).unwrap();
+        let expected_speed = -2304.0 * 0.3048; // ftps -> m/s
+
+        println!("(ut_decode_vertical_speed) speed: {speed}",);
+        assert!((speed - expected_speed).abs() < 0.01);
+    }
+
+    #[test]
+    fn ut_decode_speed_direction() {
+        let (speed, direction) =
+            decode_speed_direction(1, Sign::Negative, 9, Sign::Negative, 160).unwrap();
+
+        let expected_speed = 159.20 * 0.514444; // knots -> m/s
+        let expected_angle = 182.88;
+
+        println!(
+            "(ut_decode_speed_direction) speed: {}, direction: {}",
+            speed, direction
+        );
+        assert!((speed - expected_speed).abs() < 0.01);
+        assert!((direction - expected_angle).abs() < 0.01);
     }
 }

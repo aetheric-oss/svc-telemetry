@@ -544,6 +544,9 @@ pub enum LocationDecodeError {
 
     /// Unknown altitude
     UnknownAltitude,
+
+    /// Unknown timestamp
+    UnknownTimestamp,
 }
 
 impl LocationMessage {
@@ -566,7 +569,7 @@ impl LocationMessage {
         Ok(altitude)
     }
 
-    /// Decode the speed
+    /// Decode the speed in meters per second
     pub fn decode_speed(&self) -> Result<f32, LocationDecodeError> {
         // Speed addition is added when the speed multiplier is 0.75
         //  0.75 is used when speed exceeds 63.75 m/s
@@ -586,9 +589,21 @@ impl LocationMessage {
         }
     }
 
-    /// Decode the vertical speed
-    pub fn decode_vertical_speed(&self) -> f32 {
-        self.vertical_speed as f32 * 0.5
+    /// Decode the vertical speed in meters per second
+    pub fn decode_vertical_speed(&self) -> Result<f32, LocationDecodeError> {
+        let mut speed = (self.vertical_speed as f32) * 0.5;
+
+        if speed == 63.0 {
+            return Err(LocationDecodeError::UnknownSpeed);
+        }
+
+        if speed >= 62.0 {
+            speed = 62.0;
+        } else if speed <= -62.0 {
+            speed = -62.0;
+        }
+
+        Ok(speed)
     }
 
     /// Decode the latitude
@@ -602,8 +617,9 @@ impl LocationMessage {
     }
 
     /// Decode the timestamp
-    pub fn decode_timestamp(&self, _receipt_timestamp: DateTime<Utc>) -> u16 {
-        todo!("decode_timestamp")
+    pub fn decode_timestamp(&self) -> Result<DateTime<Utc>, LocationDecodeError> {
+        // TODO(R5): Aircraft timestamp decode
+        Err(LocationDecodeError::UnknownTimestamp)
     }
 
     // TODO(R5) encode implementations
