@@ -1,5 +1,4 @@
-//! Network Remote ID
-
+/// Network Remote ID
 use chrono::{DateTime, Utc};
 use packed_struct::prelude::packed_bits::Bits;
 use packed_struct::prelude::*;
@@ -434,6 +433,17 @@ pub struct BasicMessage {
 
     /// Reserved Field
     pub reserved: [u8; 3],
+}
+
+impl Default for BasicMessage {
+    fn default() -> Self {
+        BasicMessage {
+            id_type: IdType::None,
+            ua_type: UaType::Undeclared,
+            uas_id: [0; 20],
+            reserved: [0; 3],
+        }
+    }
 }
 
 /// Remote ID Location Message

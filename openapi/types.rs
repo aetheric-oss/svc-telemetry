@@ -1,4 +1,4 @@
-pub use adsb_deku::{Frame, DF};
+pub use adsb_deku::{Frame as AdsbFrame, DF};
 
 /// A trait for getting a hashed key from a bit-packed frame
 pub trait Keys {
@@ -18,7 +18,7 @@ pub trait Keys {
     }
 }
 
-impl Keys for Frame {
+impl Keys for AdsbFrame {
     fn primary_key(&self) -> u32 {
         let bytes: [u8; 4] = match &self.df {
             adsb_deku::DF::ADSB(adsb) => {

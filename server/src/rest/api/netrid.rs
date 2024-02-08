@@ -54,43 +54,6 @@ impl From<NetridAircraftType> for GisAircraftType {
     }
 }
 
-///
-/// Pushes a position telemetry message to the ring buffer
-///
-pub async fn gis_position_push(
-    identifier: String,
-    latitude: f64,
-    longitude: f64,
-    altitude_meters: f32,
-    ring: Arc<Mutex<VecDeque<AircraftPosition>>>,
-) -> Result<(), ()> {
-    let item = AircraftPosition {
-        identifier,
-        geom: Some(PointZ {
-            latitude,
-            longitude,
-            altitude_meters,
-        }),
-        timestamp_aircraft: None,
-        timestamp_network: Some(Utc::now().into()),
-    };
-
-    match ring.try_lock() {
-        Ok(mut ring) => {
-            rest_debug!(
-                "(gis_position_push) pushing to ring buffer (items: {})",
-                ring.len()
-            );
-            ring.push_back(item);
-            Ok(())
-        }
-        _ => {
-            rest_warn!("(gis_position_push) could not push to ring buffer.");
-            Err(())
-        }
-    }
-}
-
 /// Processes a basic remote id message type
 async fn process_basic_message(
     _identifier: String,
@@ -105,7 +68,7 @@ async fn process_basic_message(
         return Err(StatusCode::BAD_REQUEST);
     };
 
-    let item = AircraftId {
+    let id_item = AircraftId {
         identifier,
         aircraft_type,
         timestamp_network: Some(Utc::now().into()),
@@ -113,12 +76,8 @@ async fn process_basic_message(
 
     match id_ring.try_lock() {
         Ok(mut ring) => {
-            rest_debug!(
-                "(process_basic_message) pushing to ring buffer (items: {})",
-                ring.len()
-            );
-
-            ring.push_back(item);
+            rest_debug!("(process_basic_message) pushing to id ring buffer.");
+            ring.push_back(id_item);
             Ok(())
         }
         _ => {
@@ -187,11 +146,7 @@ async fn process_location_message(
 
     match position_ring.try_lock() {
         Ok(mut ring) => {
-            rest_debug!(
-                "(process_basic_message) pushing to ring buffer (items: {})",
-                ring.len()
-            );
-
+            rest_debug!("(process_basic_message) pushing to position ring buffer.");
             ring.push_back(position_item);
         }
         _ => {
@@ -202,11 +157,7 @@ async fn process_location_message(
 
     match velocity_ring.try_lock() {
         Ok(mut ring) => {
-            rest_debug!(
-                "(process_basic_message) pushing to ring buffer (items: {})",
-                ring.len()
-            );
-
+            rest_debug!("(process_basic_message) pushing to velocity ring buffer.");
             ring.push_back(velocity_item);
             Ok(())
         }

@@ -71,7 +71,7 @@ async fn adsb(url: String) {
         };
 
         count += 1;
-        odd_flag = 1 - odd_flag;
+        odd_flag ^= 1;
 
         let req = Request::builder()
             .method(Method::POST)
