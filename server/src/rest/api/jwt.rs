@@ -53,9 +53,6 @@ pub struct Claims {
     /// Subject
     pub sub: String,
 
-    /// Audience
-    pub aud: String,
-
     /// Issued at time in seconds
     pub iat: usize,
 
@@ -79,12 +76,7 @@ impl Claims {
             return Err(StatusCode::INTERNAL_SERVER_ERROR);
         };
 
-        let claims = Claims {
-            sub,
-            aud: "svc-telemetry".to_string(),
-            iat,
-            exp,
-        };
+        let claims = Claims { sub, iat, exp };
 
         let Some(jwt_secret) = JWT_SECRET.get() else {
             rest_error!("(Claims::create) JWT_SECRET not set.");
@@ -108,7 +100,10 @@ impl Claims {
         let key = DecodingKey::from_secret(jwt_secret.as_bytes());
         decode(&token, &key, &Validation::default())
             .map(|data| data.claims)
-            .map_err(|_| StatusCode::UNAUTHORIZED)
+            .map_err(|e| {
+                rest_error!("(Claims::decode) could not decode JWT: {e}");
+                StatusCode::UNAUTHORIZED
+            })
     }
 }
 
@@ -117,6 +112,7 @@ pub fn get_token_from_cookie_jar(
     req: &Request<Body>,
     cookie_jar: &CookieJar,
 ) -> Result<String, (StatusCode, Json<ErrorResponse>)> {
+    rest_info!("(get_token_from_cookie_jar) getting token from cookie jar.");
     if let Some(cookie) = cookie_jar.get("token") {
         return Ok(cookie.value().to_string());
     }
@@ -163,8 +159,10 @@ pub async fn auth(
     mut req: Request<Body>,
     next: Next<Body>,
 ) -> Result<impl IntoResponse, (StatusCode, Json<ErrorResponse>)> {
+    rest_info!("(auth) authenticating request.");
     let token = get_token_from_cookie_jar(&req, &cookie_jar)?;
-    let claims = Claims::decode(token).map_err(|_| {
+    let claims = Claims::decode(token).map_err(|e| {
+        rest_warn!("(auth) could not decode token: {e}");
         let json_error = ErrorResponse {
             status: "fail".to_string(),
             message: "Invalid token".to_string(),

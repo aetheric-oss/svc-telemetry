@@ -4,6 +4,12 @@ volumes:
   redis-data:
   rabbitmq-data:
 
+configs:
+  log4rs:
+    file: log4rs.yaml
+  dot-env:
+    file: .env
+
 services:
   redis:
     container_name: svc-telemetry-redis
@@ -42,34 +48,14 @@ services:
       - RABBITMQ_NODENAME
 
   web-server:
-    container_name: ${DOCKER_NAME}-example-server
-    image: ${PACKAGE_NAME}:latest
     depends_on:
       redis:
         condition: service_healthy
       rabbitmq:
         condition: service_healthy
-    links:
-      - redis
-      - rabbitmq
-    volumes:
-      - type: bind
-        source: log4rs.yaml
-        target: ${LOG_CONFIG}
-      - type: bind
-        source: logs/
-        target: /logs/
-      - type: bind
-        source: .env
-        target: /.env
-    ports:
-      - ${HOST_PORT_REST}:${DOCKER_PORT_REST}
-      - ${HOST_PORT_GRPC}:${DOCKER_PORT_GRPC}
-    healthcheck:
-      test: ["CMD", "grpc_health_probe", "-addr", "localhost:${DOCKER_PORT_GRPC}"]
-      interval: 2s
-      timeout: 1s
-      retries: 3
+    extends:
+      file: docker-compose-base.yml
+      service: web-server
     environment:
       - REDIS__URL
       - REDIS__POOL__MAX_SIZE
@@ -95,23 +81,16 @@ services:
       - JWT_SECRET
 
   example:
-    links:
-      - web-server
-    depends_on:
-      web-server:
-        condition: service_healthy
-    container_name: ${DOCKER_NAME}-example
-    image: ${RUST_IMAGE_NAME}:${RUST_IMAGE_TAG}
-    volumes:
-      - type: bind
-        source: "${SOURCE_PATH}/"
-        target: "/usr/src/app"
-      - type: bind
-        source: "${SOURCE_PATH}/.cargo/registry"
-        target: "/usr/local/cargo/registry"
-    environment:
-      - SERVER_HOSTNAME=web-server
-      - SERVER_PORT_GRPC
-      - SERVER_PORT_REST
-      - EXAMPLE_TARGET
-    command: cargo run --manifest-path "${CARGO_MANIFEST_PATH}" --example "${EXAMPLE_TARGET}"
+    extends:
+      file: docker-compose-base.yml
+      service: example
+
+  ut-coverage:
+    extends:
+      file: docker-compose-base.yml
+      service: ut-coverage
+
+  it-coverage:
+    extends:
+      file: docker-compose-base.yml
+      service: it-coverage

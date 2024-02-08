@@ -2,7 +2,7 @@
 //! provides client and server implementations for gRPC
 
 use crate::grpc::client::GrpcClients;
-use log::{info, warn};
+use log::warn;
 use std::collections::VecDeque;
 use std::sync::{Arc, Mutex};
 use std::thread::sleep;
@@ -114,15 +114,15 @@ pub trait BatchLoop<T>: IsBatch<T> {
 
             let _ = self.push().await;
 
-            let Ok(elapsed) = start.elapsed() else {
-                warn!("(gis_batch_loop) Could not get elapsed time.");
-                continue;
-            };
+            // let Ok(_elapsed) = start.elapsed() else {
+            //     warn!("(gis_batch_loop) Could not get elapsed time.");
+            //     continue;
+            // };
 
-            info!(
-                "(gis_batch_loop) push to svc-gis took {:?} milliseconds.",
-                elapsed
-            );
+            // debug!(
+            //     "(gis_batch_loop) push to svc-gis took {:?}.",
+            //     elapsed
+            // );
         }
     }
 }
