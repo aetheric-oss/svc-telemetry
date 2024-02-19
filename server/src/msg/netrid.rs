@@ -10,7 +10,8 @@ use packed_struct::prelude::*;
 ///////////////////
 //////////
 
-const REMOTE_ID_PROTOCOL_VERSION: u8 = 0x2;
+/// Remote ID Protocol Version
+pub const REMOTE_ID_PROTOCOL_VERSION: u8 = 0x2;
 
 /// Remote ID Message Types
 #[derive(PrimitiveEnum_u8, Clone, Copy, Debug, PartialEq)]

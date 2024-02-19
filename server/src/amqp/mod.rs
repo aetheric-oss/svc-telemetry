@@ -16,6 +16,24 @@ pub const QUEUE_NAME_ADSB: &str = "adsb";
 /// Routing key for ADSB messages
 pub const ROUTING_KEY_ADSB: &str = "adsb";
 
+/// Name of the AMQP queue for NETRID identification messages
+pub const QUEUE_NAME_NETRID_ID: &str = "netrid_id";
+
+/// Name of the AMQP queue for NETRID position messages
+pub const QUEUE_NAME_NETRID_POSITION: &str = "netrid_pos";
+
+/// Name of the AMQP queue for NETRID velocity messages
+pub const QUEUE_NAME_NETRID_VELOCITY: &str = "netrid_vel";
+
+/// Routing key for NETRID Identification messages
+pub const ROUTING_KEY_NETRID_ID: &str = "netrid:id";
+
+/// Routing key for NETRID Position messages
+pub const ROUTING_KEY_NETRID_POSITION: &str = "netrid:pos";
+
+/// Routing key for NETRID Velocity messages
+pub const ROUTING_KEY_NETRID_VELOCITY: &str = "netrid:vel";
+
 /// Custom Error type for MQ errors
 #[derive(Debug, Snafu, Clone, Copy)]
 pub enum AMQPError {
@@ -113,20 +131,58 @@ pub async fn init_mq(config: Config) -> Result<lapin::Channel, AMQPError> {
 
     // Declare ADSB Queue
     {
-        amqp_info!("(init_mq) creating '{QUEUE_NAME_ADSB}' queue...");
-        let result = amqp_channel
+        amqp_info!("(init_mq) creating queues...");
+        let _ = amqp_channel
             .queue_declare(
                 QUEUE_NAME_ADSB,
                 lapin::options::QueueDeclareOptions::default(),
                 lapin::types::FieldTable::default(),
             )
-            .await;
+            .await
+            .map_err(|e| {
+                amqp_error!("(init_mq) could not declare queue '{QUEUE_NAME_ADSB}'.");
+                amqp_debug!("(init_mq) error: {:?}", e);
+                AMQPError::CouldNotDeclareQueue
+            })?;
 
-        if let Err(e) = result {
-            amqp_error!("(init_mq) could not declare queue '{QUEUE_NAME_ADSB}'.");
-            amqp_debug!("(init_mq) error: {:?}", e);
-            return Err(AMQPError::CouldNotDeclareQueue);
-        }
+        let _ = amqp_channel
+            .queue_declare(
+                QUEUE_NAME_NETRID_ID,
+                lapin::options::QueueDeclareOptions::default(),
+                lapin::types::FieldTable::default(),
+            )
+            .await
+            .map_err(|e| {
+                amqp_error!("(init_mq) could not declare queue '{QUEUE_NAME_NETRID_ID}'.");
+                amqp_debug!("(init_mq) error: {:?}", e);
+                AMQPError::CouldNotDeclareQueue
+            })?;
+
+        let _ = amqp_channel
+            .queue_declare(
+                QUEUE_NAME_NETRID_POSITION,
+                lapin::options::QueueDeclareOptions::default(),
+                lapin::types::FieldTable::default(),
+            )
+            .await
+            .map_err(|e| {
+                amqp_error!("(init_mq) could not declare queue '{QUEUE_NAME_NETRID_POSITION}'.");
+                amqp_debug!("(init_mq) error: {:?}", e);
+                AMQPError::CouldNotDeclareQueue
+            })?;
+
+        let _ = amqp_channel
+            .queue_declare(
+                QUEUE_NAME_NETRID_VELOCITY,
+                lapin::options::QueueDeclareOptions::default(),
+                lapin::types::FieldTable::default(),
+            )
+            .await
+            .map_err(|e| {
+                amqp_error!("(init_mq) could not declare queue '{QUEUE_NAME_NETRID_VELOCITY}'.");
+                amqp_debug!("(init_mq) error: {:?}", e);
+                AMQPError::CouldNotDeclareQueue
+            })?;
     }
 
     //
@@ -134,20 +190,19 @@ pub async fn init_mq(config: Config) -> Result<lapin::Channel, AMQPError> {
     //
     {
         amqp_info!("(init_mq) declaring exchange '{EXCHANGE_NAME_TELEMETRY}'...");
-        let result = amqp_channel
+        amqp_channel
             .exchange_declare(
                 EXCHANGE_NAME_TELEMETRY,
                 lapin::ExchangeKind::Topic,
                 lapin::options::ExchangeDeclareOptions::default(),
                 lapin::types::FieldTable::default(),
             )
-            .await;
-
-        if let Err(e) = result {
-            amqp_error!("(init_mq) could not declare exchange '{EXCHANGE_NAME_TELEMETRY}'.");
-            amqp_debug!("(init_mq) error: {:?}", e);
-            return Err(AMQPError::CouldNotDeclareExchange);
-        }
+            .await
+            .map_err(|e| {
+                amqp_error!("(init_mq) could not declare exchange '{EXCHANGE_NAME_TELEMETRY}'.");
+                amqp_debug!("(init_mq) error: {:?}", e);
+                AMQPError::CouldNotDeclareExchange
+            })?;
     }
 
     //
@@ -155,7 +210,7 @@ pub async fn init_mq(config: Config) -> Result<lapin::Channel, AMQPError> {
     //
     {
         amqp_info!("(init_mq) binding queue '{QUEUE_NAME_ADSB}' to exchange '{EXCHANGE_NAME_TELEMETRY}'...");
-        let result = amqp_channel
+        amqp_channel
             .queue_bind(
                 QUEUE_NAME_ADSB,
                 EXCHANGE_NAME_TELEMETRY,
@@ -163,15 +218,65 @@ pub async fn init_mq(config: Config) -> Result<lapin::Channel, AMQPError> {
                 lapin::options::QueueBindOptions::default(),
                 lapin::types::FieldTable::default(),
             )
-            .await;
+            .await
+            .map_err(|e| {
+                amqp_error!("(init_mq) could not bind queue '{QUEUE_NAME_ADSB}' to exchange.");
+                amqp_debug!("(init_mq) error: {:?}", e);
+                AMQPError::CouldNotDeclareQueue
+            })?;
 
-        if let Err(e) = result {
-            amqp_error!("(init_mq) could not bind queue '{QUEUE_NAME_ADSB}' to exchange.");
-            amqp_debug!("(init_mq) error: {:?}", e);
-        }
+        amqp_info!("(init_mq) binding queue '{QUEUE_NAME_NETRID_ID}' to exchange '{EXCHANGE_NAME_TELEMETRY}'...");
+        amqp_channel
+            .queue_bind(
+                QUEUE_NAME_NETRID_ID,
+                EXCHANGE_NAME_TELEMETRY,
+                ROUTING_KEY_NETRID_ID,
+                lapin::options::QueueBindOptions::default(),
+                lapin::types::FieldTable::default(),
+            )
+            .await
+            .map_err(|e| {
+                amqp_error!("(init_mq) could not bind queue '{QUEUE_NAME_NETRID_ID}' to exchange.");
+                amqp_debug!("(init_mq) error: {:?}", e);
+                AMQPError::CouldNotDeclareQueue
+            })?;
+
+        amqp_info!("(init_mq) binding queue '{QUEUE_NAME_NETRID_POSITION}' to exchange '{EXCHANGE_NAME_TELEMETRY}'...");
+        amqp_channel
+            .queue_bind(
+                QUEUE_NAME_NETRID_POSITION,
+                EXCHANGE_NAME_TELEMETRY,
+                ROUTING_KEY_NETRID_POSITION,
+                lapin::options::QueueBindOptions::default(),
+                lapin::types::FieldTable::default(),
+            )
+            .await
+            .map_err(|e| {
+                amqp_error!(
+                    "(init_mq) could not bind queue '{QUEUE_NAME_NETRID_POSITION}' to exchange."
+                );
+                amqp_debug!("(init_mq) error: {:?}", e);
+                AMQPError::CouldNotDeclareQueue
+            })?;
+
+        amqp_info!("(init_mq) binding queue '{QUEUE_NAME_NETRID_VELOCITY}' to exchange '{EXCHANGE_NAME_TELEMETRY}'...");
+        amqp_channel
+            .queue_bind(
+                QUEUE_NAME_NETRID_VELOCITY,
+                EXCHANGE_NAME_TELEMETRY,
+                ROUTING_KEY_NETRID_VELOCITY,
+                lapin::options::QueueBindOptions::default(),
+                lapin::types::FieldTable::default(),
+            )
+            .await
+            .map_err(|e| {
+                amqp_error!(
+                    "(init_mq) could not bind queue '{QUEUE_NAME_NETRID_VELOCITY}' to exchange."
+                );
+                amqp_debug!("(init_mq) error: {:?}", e);
+                AMQPError::CouldNotDeclareQueue
+            })?;
     }
-
-    // TODO(R4): Telemetry from other assets
 
     Ok(amqp_channel)
 }

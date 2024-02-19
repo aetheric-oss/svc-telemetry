@@ -2,8 +2,8 @@
 
 use super::api;
 use crate::amqp::init_mq;
-use crate::cache::pool::RedisPool;
-use crate::cache::RedisPools;
+use crate::cache::pool::{GisPool, TelemetryPool};
+use crate::cache::TelemetryPools;
 use crate::grpc::client::GrpcClients;
 use crate::shutdown_signal;
 use crate::Config;
@@ -14,10 +14,8 @@ use axum::{
     routing::{get, post},
     BoxError, Router,
 };
-use std::collections::VecDeque;
+use rand::{distributions::Alphanumeric, Rng};
 use std::net::SocketAddr;
-use std::sync::{Arc, Mutex};
-use svc_gis_client_grpc::client::{AircraftId, AircraftPosition, AircraftVelocity};
 use tower::{
     buffer::BufferLayer,
     limit::{ConcurrencyLimitLayer, RateLimitLayer},
@@ -32,17 +30,14 @@ use tower_http::trace::TraceLayer;
 /// ```
 /// use svc_telemetry::rest::server::rest_server;
 /// use svc_telemetry::grpc::client::GrpcClients;
-/// use svc_gis_client_grpc::client::{AircraftPosition, AircraftVelocity, AircraftId};
+/// use svc_gis_client_grpc::prelude::types::{AircraftPosition, AircraftVelocity, AircraftId};
 /// use svc_telemetry::Config;
 /// use std::collections::VecDeque;
 /// use std::sync::{Arc, Mutex};
 /// async fn example() -> Result<(), tokio::task::JoinError> {
 ///     let config = Config::default();
-///     let id_ring = Arc::new(Mutex::new(VecDeque::<AircraftId>::with_capacity(10)));
-///     let position_ring = Arc::new(Mutex::new(VecDeque::<AircraftPosition>::with_capacity(10)));
-///     let velocity_ring = Arc::new(Mutex::new(VecDeque::<AircraftVelocity>::with_capacity(10)));
 ///     let grpc_clients = GrpcClients::default(config.clone());
-///     tokio::spawn(rest_server(config, grpc_clients, id_ring, position_ring, velocity_ring, None)).await;
+///     tokio::spawn(rest_server(config, grpc_clients, None)).await;
 ///     Ok(())
 /// }
 /// ```
@@ -52,9 +47,6 @@ use tower_http::trace::TraceLayer;
 pub async fn rest_server(
     config: Config,
     grpc_clients: GrpcClients,
-    id_ring: Arc<Mutex<VecDeque<AircraftId>>>,
-    position_ring: Arc<Mutex<VecDeque<AircraftPosition>>>,
-    velocity_ring: Arc<Mutex<VecDeque<AircraftVelocity>>>,
     shutdown_rx: Option<tokio::sync::oneshot::Receiver<()>>,
 ) -> Result<(), ()> {
     rest_info!("(rest_server) entry.");
@@ -102,18 +94,27 @@ pub async fn rest_server(
     //
 
     // Redis Pools
-    let pools = RedisPools {
-        adsb: RedisPool::new(config.clone(), "tlm:adsb").await?,
-        netrid: RedisPool::new(config.clone(), "tlm:netrid").await?,
+    let tlm_pools = TelemetryPools {
+        adsb: TelemetryPool::new(config.clone(), "tlm:adsb").await?,
+        netrid: TelemetryPool::new(config.clone(), "tlm:netrid").await?,
     };
 
+    let gis_pool = GisPool::new(config.clone()).await?;
+
     // RabbitMQ Channel
-    let mq_channel = init_mq(config.clone())
-        .await
-        .map_err(|_| rest_error!("(rest_server) could not create RabbitMQ Channel."));
+    let mq_channel = init_mq(config.clone()).await.map_err(|e| {
+        rest_error!("(rest_server) could not create RabbitMQ Channel: {e}");
+    })?;
 
     // TODO(R5): Replace with PKI certificates
-    match crate::rest::api::jwt::JWT_SECRET.set(config.jwt_secret.clone()) {
+    // Temporarily set JWT token to a random string
+    match crate::rest::api::jwt::JWT_SECRET.set(
+        rand::thread_rng()
+            .sample_iter(&Alphanumeric)
+            .take(42)
+            .map(char::from)
+            .collect(),
+    ) {
         Err(e) => {
             rest_error!("(rest_server) could not set JWT_SECRET: {}", e);
             return Err(());
@@ -127,13 +128,12 @@ pub async fn rest_server(
     // Create Server
     //
     let app = Router::new()
+        // must be first with its route layer
+        .route("/telemetry/netrid", post(api::netrid::network_remote_id))
+        .route_layer(axum::middleware::from_fn(crate::rest::api::jwt::auth))
+        // other routes after route_layer not affected
         .route("/health", get(api::health::health_check))
         .route("/telemetry/login", get(crate::rest::api::jwt::login))
-        .route(
-            "/telemetry/netrid",
-            post(api::netrid::network_remote_id)
-                .route_layer(axum::middleware::from_fn(crate::rest::api::jwt::auth)),
-        )
         .route("/telemetry/adsb", post(api::adsb::adsb))
         .layer(
             CorsLayer::new()
@@ -142,12 +142,10 @@ pub async fn rest_server(
                 .allow_methods(Any),
         )
         .layer(limit_middleware)
-        .layer(Extension(pools))
+        .layer(Extension(tlm_pools))
+        .layer(Extension(gis_pool))
         .layer(Extension(mq_channel))
-        .layer(Extension(grpc_clients))
-        .layer(Extension(id_ring))
-        .layer(Extension(position_ring))
-        .layer(Extension(velocity_ring));
+        .layer(Extension(grpc_clients));
 
     match axum::Server::bind(&full_rest_addr)
         .serve(app.into_make_service())

@@ -1,21 +1,19 @@
 //! Endpoints for updating aircraft positions
 
-use crate::cache::pool::RedisPool;
-use crate::cache::RedisPools;
+use crate::cache::pool::{GisPool, TelemetryPool};
+use crate::cache::TelemetryPools;
 use crate::grpc::client::GrpcClients;
 use crate::msg::adsb::{
     decode_altitude, decode_cpr, decode_speed_direction, decode_vertical_speed,
     get_adsb_icao_address, get_adsb_message_type, ADSB_SIZE_BYTES,
 };
-use adsb_deku::adsb::ME::AirbornePositionBaroAltitude as Position;
+use adsb_deku::adsb::ME::AirbornePositionBaroAltitude as AirbornePosition;
 use adsb_deku::adsb::ME::AirborneVelocity as Velocity;
 use adsb_deku::adsb::ME::AircraftIdentification as Identification;
 use adsb_deku::adsb::{AirborneVelocitySubType, GroundSpeedDecoding, TypeCoding};
 use adsb_deku::deku::DekuContainerRead;
 use adsb_deku::{CPRFormat, Sign};
-use svc_gis_client_grpc::client::{
-    AircraftId, AircraftPosition, AircraftType, AircraftVelocity, PointZ,
-};
+use svc_gis_client_grpc::prelude::types::*;
 use svc_storage_client_grpc::prelude::*;
 use svc_storage_client_grpc::resources::adsb;
 
@@ -23,8 +21,6 @@ use axum::{body::Bytes, extract::Extension, Json};
 use chrono::Utc;
 use hyper::StatusCode;
 use std::cmp::Ordering;
-use std::collections::VecDeque;
-use std::sync::{Arc, Mutex};
 
 /// ADSB entries in the cache will expire after 60 seconds
 const CACHE_EXPIRE_MS_ADSB: u32 = 10000;
@@ -60,12 +56,12 @@ struct GisVelocityData {
     // gnss_baro_diff: u16,
 }
 
-/// Pushes an aircraft identifier message to the ring buffer
+/// Pushes an aircraft identifier message to the queue
 async fn gis_identifier_push(
     identifier: String,
     type_coding: TypeCoding,
     aircraft_category: u8,
-    id_ring: Arc<Mutex<VecDeque<AircraftId>>>,
+    mut gis_pool: GisPool,
 ) -> Result<(), ()> {
     let aircraft_type: AircraftType = match (type_coding, aircraft_category) {
         (TypeCoding::D, _) => AircraftType::Other,
@@ -89,33 +85,23 @@ async fn gis_identifier_push(
 
     let item = AircraftId {
         identifier,
-        aircraft_type: aircraft_type as i32,
-        timestamp_network: Some(Utc::now().into()),
+        aircraft_type,
+        timestamp_network: Utc::now(),
+        timestamp_asset: None,
     };
 
-    match id_ring.try_lock() {
-        Ok(mut ring) => {
-            rest_debug!(
-                "(gis_identifier_push) pushing to ID ring buffer (items: {})",
-                ring.len()
-            );
-            ring.push_back(item);
-            Ok(())
-        }
-        _ => {
-            rest_warn!("(gis_identifier_push) could not push to ID ring buffer.");
-            Err(())
-        }
-    }
+    gis_pool
+        .push::<AircraftId>(item, REDIS_KEY_AIRCRAFT_ID)
+        .await
 }
 
 ///
-/// Pushes a position telemetry message to the ring buffer
+/// Pushes a position telemetry message to the queue
 ///
 async fn gis_position_push(
     data: GisPositionData,
-    mut pool: RedisPool,
-    position_ring: Arc<Mutex<VecDeque<AircraftPosition>>>,
+    mut tlm_pool: TelemetryPool,
+    mut gis_pool: GisPool,
 ) -> Result<(), ()> {
     if data.odd_flag == CPRFormat::Odd {
         rest_info!("(gis_position_push) received an odd flag CPR format message.");
@@ -129,7 +115,7 @@ async fn gis_position_push(
     ];
 
     let n_expected_results = keys.len();
-    let Ok(results) = pool.multiple_get::<u32>(keys).await else {
+    let Ok(results) = tlm_pool.multiple_get::<u32>(keys).await else {
         rest_warn!("(gis_position_push) could not get packet from cache.");
         return Err(());
     };
@@ -148,40 +134,24 @@ async fn gis_position_push(
     };
 
     let identifier = format!("{:x}", data.icao);
-    let timestamp_network: Option<Timestamp> = Some(Utc::now().into());
     let item = AircraftPosition {
         identifier: identifier.clone(),
-        geom: Some(PointZ {
+        position: Position {
             latitude,
             longitude,
-            altitude_meters: decode_altitude(data.alt),
-        }),
-        timestamp_network: timestamp_network.clone(),
-        timestamp_aircraft: None,
+            altitude_meters: decode_altitude(data.alt) as f64,
+        },
+        timestamp_network: Utc::now(),
+        timestamp_asset: None,
     };
 
-    match position_ring.try_lock() {
-        Ok(mut ring) => {
-            rest_debug!(
-                "(gis_position_push) pushing to position ring buffer (items: {})",
-                ring.len()
-            );
-
-            ring.push_back(item);
-            Ok(())
-        }
-        _ => {
-            rest_warn!("(gis_position_push) could not push to one or more ring buffers.");
-            Err(())
-        }
-    }
+    gis_pool
+        .push::<AircraftPosition>(item, REDIS_KEY_AIRCRAFT_POSITION)
+        .await
 }
 
-/// Pushes a velocity telemetry message to the ring buffer
-async fn gis_velocity_push(
-    data: GisVelocityData,
-    velocity_ring: Arc<Mutex<VecDeque<AircraftVelocity>>>,
-) -> Result<(), ()> {
+/// Pushes a velocity telemetry message to the queue
+async fn gis_velocity_push(data: GisVelocityData, mut gis_pool: GisPool) -> Result<(), ()> {
     let Ok((velocity_horizontal_ground_mps, track_angle_degrees)) = decode_speed_direction(
         data.st,
         data.ew_sign,
@@ -204,25 +174,13 @@ async fn gis_velocity_push(
         velocity_horizontal_air_mps: None,
         velocity_vertical_mps,
         track_angle_degrees,
-        timestamp_aircraft: None,
-        timestamp_network: Some(Utc::now().into()),
+        timestamp_asset: None,
+        timestamp_network: Utc::now(),
     };
 
-    match velocity_ring.try_lock() {
-        Ok(mut ring) => {
-            rest_debug!(
-                "(gis_velocity_push) pushing to velocity ring buffer (items: {})",
-                ring.len()
-            );
-
-            ring.push_back(item);
-            Ok(())
-        }
-        _ => {
-            rest_warn!("(gis_velocity_push) could not push to velocity ring buffer.");
-            Err(())
-        }
-    }
+    gis_pool
+        .push::<AircraftVelocity>(item, REDIS_KEY_AIRCRAFT_VELOCITY)
+        .await
 }
 
 /// Post ADS-B Telemetry
@@ -240,12 +198,10 @@ async fn gis_velocity_push(
     )
 )]
 pub async fn adsb(
-    Extension(mut pools): Extension<RedisPools>,
+    Extension(mut tlm_pools): Extension<TelemetryPools>,
+    Extension(gis_pool): Extension<GisPool>,
     Extension(mq_channel): Extension<lapin::Channel>,
     Extension(grpc_clients): Extension<GrpcClients>,
-    Extension(id_ring): Extension<Arc<Mutex<VecDeque<AircraftId>>>>,
-    Extension(position_ring): Extension<Arc<Mutex<VecDeque<AircraftPosition>>>>,
-    Extension(velocity_ring): Extension<Arc<Mutex<VecDeque<AircraftVelocity>>>>,
     payload: Bytes,
 ) -> Result<Json<u32>, StatusCode> {
     rest_info!("(adsb) entry.");
@@ -254,16 +210,20 @@ pub async fn adsb(
     // If the key is not in the cache, add it
     // If the key is in the cache, increment the count
     //
-    let Ok(key) = std::str::from_utf8(&payload[..]) else {
-        rest_error!("(adsb) could not convert payload to string.");
-        return Err(StatusCode::BAD_REQUEST);
-    };
+    let payload = <[u8; ADSB_SIZE_BYTES]>::try_from(payload.as_ref()).map_err(|_| {
+        rest_error!("(adsb) received ads-b message not {ADSB_SIZE_BYTES} bytes.");
+        StatusCode::BAD_REQUEST
+    })?;
 
-    let result = pools.adsb.increment(key, CACHE_EXPIRE_MS_ADSB).await;
-    let Ok(count) = result else {
-        rest_error!("(adsb) {}", result.unwrap_err());
-        return Err(StatusCode::INTERNAL_SERVER_ERROR);
-    };
+    let key = crate::cache::bytes_to_key(&payload);
+    let count = tlm_pools
+        .adsb
+        .increment(&key, CACHE_EXPIRE_MS_ADSB)
+        .await
+        .map_err(|e| {
+            rest_error!("(adsb) {e}");
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
 
     match count.cmp(&N_REPORTERS_NEEDED) {
         Ordering::Less => {
@@ -282,15 +242,10 @@ pub async fn adsb(
     //
     // Deconstruct Packet
     //
-    let Ok(payload) = <[u8; ADSB_SIZE_BYTES]>::try_from(payload.as_ref()) else {
-        rest_info!("(adsb) received ads-b message not {ADSB_SIZE_BYTES} bytes.");
-        return Err(StatusCode::BAD_REQUEST);
-    };
-
-    let Ok(frame) = adsb_deku::Frame::from_bytes((&payload, 0)) else {
-        rest_info!("(adsb) could not parse ads-b message.");
-        return Err(StatusCode::BAD_REQUEST);
-    };
+    let frame = adsb_deku::Frame::from_bytes((&payload, 0)).map_err(|e| {
+        rest_info!("(adsb) could not parse ads-b message: {e}");
+        StatusCode::BAD_REQUEST
+    })?;
 
     let frame = frame.1;
     let adsb_deku::DF::ADSB(msg) = &frame.df else {
@@ -311,15 +266,15 @@ pub async fn adsb(
 
     match &msg.me {
         Identification(adsb_deku::adsb::Identification { tc, ca, cn }) => {
-            match gis_identifier_push(cn.clone(), *tc, *ca, id_ring).await {
-                Ok(_) => rest_info!("(adsb) pushed position to ring buffer."),
+            match gis_identifier_push(cn.clone(), *tc, *ca, gis_pool).await {
+                Ok(_) => rest_info!("(adsb) pushed position to queue."),
                 Err(_) => {
-                    rest_error!("(adsb) could not push position to ring buffer.");
+                    rest_error!("(adsb) could not push position to queue.");
                     return Err(StatusCode::INTERNAL_SERVER_ERROR);
                 }
             }
         }
-        Position(adsb_deku::Altitude {
+        AirbornePosition(adsb_deku::Altitude {
             odd_flag,
             lat_cpr,
             lon_cpr,
@@ -342,7 +297,7 @@ pub async fn adsb(
                 ),
             ];
 
-            match pools
+            match tlm_pools
                 .adsb
                 .multiple_set(keyvals, CACHE_EXPIRE_MS_AIRCRAFT_CPR)
                 .await
@@ -362,10 +317,10 @@ pub async fn adsb(
                 odd_flag: *odd_flag,
             };
 
-            match gis_position_push(data, pools.adsb, position_ring).await {
-                Ok(_) => rest_info!("(adsb) pushed position to ring buffer."),
+            match gis_position_push(data, tlm_pools.adsb, gis_pool).await {
+                Ok(_) => rest_info!("(adsb) pushed position to queue."),
                 Err(_) => {
-                    rest_error!("(adsb) could not push position to ring buffer.");
+                    rest_error!("(adsb) could not push position to queue.");
                     return Err(StatusCode::INTERNAL_SERVER_ERROR);
                 }
             }
@@ -406,10 +361,10 @@ pub async fn adsb(
                 // gnss_baro_diff: *gnss_baro_diff,
             };
 
-            match gis_velocity_push(data, velocity_ring).await {
-                Ok(_) => rest_info!("(adsb) pushed velocity to ring buffer."),
+            match gis_velocity_push(data, gis_pool).await {
+                Ok(_) => rest_info!("(adsb) pushed velocity to queue."),
                 Err(_) => {
-                    rest_error!("(adsb) could not push velocity to ring buffer.");
+                    rest_error!("(adsb) could not push velocity to queue.");
                     return Err(StatusCode::INTERNAL_SERVER_ERROR);
                 }
             }

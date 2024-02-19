@@ -17,11 +17,11 @@ use axum::{
     body::Bytes,
     http::{header, StatusCode},
     middleware::Next,
-    response::IntoResponse,
+    response::Response,
     Json,
 };
 use chrono::{Duration, Utc};
-use hyper::{Body, Request};
+use hyper::Request;
 use once_cell::sync::OnceCell;
 use serde::{Deserialize, Serialize};
 
@@ -48,8 +48,8 @@ pub struct ErrorResponse {
 }
 
 /// JWT Information
-#[derive(Debug, Serialize, Deserialize)]
-pub struct Claims {
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct Claim {
     /// Subject
     pub sub: String,
 
@@ -60,40 +60,40 @@ pub struct Claims {
     pub exp: usize,
 }
 
-impl Claims {
+impl Claim {
     /// Create and encode a JWT token
     pub fn create(sub: String) -> Result<String, StatusCode> {
         let header = Header::new(JWT_ENCRYPTION_TYPE);
         let iat = Utc::now().timestamp();
         let Ok(iat) = <usize>::try_from(iat) else {
-            rest_error!("(Claims::create) could not convert IAT timestamp {iat} to usize.");
+            rest_error!("(Claim::create) could not convert IAT timestamp {iat} to usize.");
             return Err(StatusCode::INTERNAL_SERVER_ERROR);
         };
 
         let exp = (Utc::now() + Duration::seconds(JWT_EXPIRE_SECONDS)).timestamp();
         let Ok(exp) = <usize>::try_from(exp) else {
-            rest_error!("(Claims::create) could not convert EXP timestamp {exp} to usize.");
+            rest_error!("(Claim::create) could not convert EXP timestamp {exp} to usize.");
             return Err(StatusCode::INTERNAL_SERVER_ERROR);
         };
 
-        let claims = Claims { sub, iat, exp };
+        let claims = Claim { sub, iat, exp };
 
         let Some(jwt_secret) = JWT_SECRET.get() else {
-            rest_error!("(Claims::create) JWT_SECRET not set.");
+            rest_error!("(Claim::create) JWT_SECRET not set.");
             return Err(StatusCode::INTERNAL_SERVER_ERROR);
         };
 
         let key = EncodingKey::from_secret(jwt_secret.as_bytes());
         encode(&header, &claims, &key).map_err(|e| {
-            rest_error!("(Claims::create) could not encode JWT: {e}");
+            rest_error!("(Claim::create) could not encode JWT: {e}");
             StatusCode::INTERNAL_SERVER_ERROR
         })
     }
 
     /// Decode a JWT token
-    pub fn decode(token: String) -> Result<Claims, StatusCode> {
+    pub fn decode(token: String) -> Result<Claim, StatusCode> {
         let Some(jwt_secret) = JWT_SECRET.get() else {
-            rest_error!("(Claims::create) JWT_SECRET not set.");
+            rest_error!("(Claim::create) JWT_SECRET not set.");
             return Err(StatusCode::INTERNAL_SERVER_ERROR);
         };
 
@@ -101,22 +101,27 @@ impl Claims {
         decode(&token, &key, &Validation::default())
             .map(|data| data.claims)
             .map_err(|e| {
-                rest_error!("(Claims::decode) could not decode JWT: {e}");
+                rest_error!("(Claim::decode) could not decode JWT: {e}");
                 StatusCode::UNAUTHORIZED
             })
     }
 }
 
 /// Get bearer token from request
-pub fn get_token_from_cookie_jar(
-    req: &Request<Body>,
+pub fn get_token_from_cookie_jar<B>(
+    req: &Request<B>,
     cookie_jar: &CookieJar,
-) -> Result<String, (StatusCode, Json<ErrorResponse>)> {
+) -> Result<String, (StatusCode, Json<ErrorResponse>)>
+where
+    B: std::fmt::Debug,
+{
     rest_info!("(get_token_from_cookie_jar) getting token from cookie jar.");
     if let Some(cookie) = cookie_jar.get("token") {
         return Ok(cookie.value().to_string());
     }
 
+    // rest_debug!("(get_token_from_cookie_jar) request: {:?}", req);
+    // rest_debug!("(get_token_from_cookie_jar) request headers: {:?}", req.headers());
     let Some(header) = req.headers().get(header::AUTHORIZATION) else {
         let message = "could not get authorization header.".to_string();
         rest_warn!("(get_token_from_cookie_jar) {message}");
@@ -140,6 +145,7 @@ pub fn get_token_from_cookie_jar(
     };
 
     if let Some(substring) = auth_value.strip_prefix("Bearer ") {
+        // rest_debug!("(get_token_from_cookie_jar) request token: {substring}");
         return Ok(substring.to_owned());
     }
 
@@ -154,14 +160,19 @@ pub fn get_token_from_cookie_jar(
 }
 
 /// Authenticate a request with a JWT
-pub async fn auth(
+pub async fn auth<B>(
     cookie_jar: CookieJar,
-    mut req: Request<Body>,
-    next: Next<Body>,
-) -> Result<impl IntoResponse, (StatusCode, Json<ErrorResponse>)> {
+    mut req: Request<B>,
+    next: Next<B>,
+) -> Result<Response, (StatusCode, Json<ErrorResponse>)>
+where
+    B: std::fmt::Debug,
+{
     rest_info!("(auth) authenticating request.");
     let token = get_token_from_cookie_jar(&req, &cookie_jar)?;
-    let claims = Claims::decode(token).map_err(|e| {
+
+    rest_debug!("(auth) request token: {token}");
+    let claim = Claim::decode(token).map_err(|e| {
         rest_warn!("(auth) could not decode token: {e}");
         let json_error = ErrorResponse {
             status: "fail".to_string(),
@@ -170,8 +181,9 @@ pub async fn auth(
         (StatusCode::UNAUTHORIZED, Json(json_error))
     })?;
 
-    let identifier = claims.sub.clone();
-    req.extensions_mut().insert(identifier);
+    rest_debug!("(auth) request claim: {:?}", claim);
+
+    req.extensions_mut().insert(claim);
     Ok(next.run(req).await)
 }
 
@@ -182,14 +194,53 @@ pub async fn auth(
     tag = "svc-telemetry",
     request_body = String, // identifier TODO(R5)
     responses(
-        (status = 200, description = "Telemetry received."),
+        (status = 200, description = "Login successful, token returned."),
+        (status = 400, description = "Bad request."),
         (status = 500, description = "Something went wrong."),
         (status = 503, description = "Dependencies of svc-telemetry were down."),
     )
 )]
 pub async fn login(identifier: Bytes) -> Result<Json<String>, StatusCode> {
     let identifier = String::from_utf8(identifier.to_vec()).map_err(|_| StatusCode::BAD_REQUEST)?;
+    if identifier.is_empty() {
+        rest_warn!("(login) empty identifier, failing login request.");
+        return Err(StatusCode::BAD_REQUEST);
+    }
 
-    let token = Claims::create(identifier)?;
+    let token = Claim::create(identifier)?;
     Ok(Json(token))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use axum::{middleware, routing::post, Extension, Router};
+    use hyper::{Method, Request};
+    use tower::ServiceExt;
+
+    #[tokio::test]
+    async fn middleware_runs() {
+        async fn handler(Extension(claim): Extension<Claim>) {
+            crate::get_log_handle().await;
+            ut_info!("(middleware_runs): {:#?}", claim);
+            serde_json::to_string(&claim).unwrap();
+        }
+
+        JWT_SECRET.set("test".to_string()).unwrap();
+
+        let router: Router = Router::new()
+            .route("/", post(handler))
+            .route_layer(middleware::from_fn(auth));
+
+        let token = Claim::create("test".to_string()).unwrap();
+        let req = Request::builder()
+            .uri("/")
+            .method(Method::POST)
+            .header("content-type", "application/octet-stream")
+            .header("Authorization", format!("Bearer {token}"))
+            .body(Bytes::from(vec![0x82]).into())
+            .unwrap();
+
+        router.oneshot(req).await.unwrap();
+    }
 }

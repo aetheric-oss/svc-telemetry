@@ -54,7 +54,7 @@ async fn adsb(url: &str, client: &Client<HttpConnector>) {
                 .method(Method::POST)
                 .uri(uri.clone())
                 .header("content-type", "application/octet-stream")
-                .body(Body::from(payload.clone().to_vec()))
+                .body(hyper::body::Bytes::from(payload.to_vec()).into())
                 .unwrap();
 
             let resp = client.request(req).await;

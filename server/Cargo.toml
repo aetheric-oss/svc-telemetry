@@ -53,6 +53,7 @@ packed_struct  = "0.10"
 prost          = "0.12"
 prost-build    = "0.12"
 prost-types    = "0.12"
+rand           = "0.8"
 serde          = "1.0"
 serde_json     = "1.0"
 snafu          = "0.7"
@@ -60,7 +61,7 @@ tokio          = { version = "1.33", features = ["full"] }
 tokio-util     = "0.7"
 tonic          = "0.10"
 tonic-health   = "0.10"
-tower          = { version = "0.4", features = ["limit"] }
+tower          = { version = "0.4", features = ["limit", "util"] }
 tower-http     = { version = "0.4", features = ["cors", "trace"] }
 uuid           = { version = "1.5", features = ["serde"] }
 
@@ -71,8 +72,7 @@ tag      = "latest-develop"
 
 [dependencies.svc-gis-client-grpc]
 git = "https://github.com/Arrow-air/svc-gis"
-# tag = "latest-develop"
-branch = "am-smith/update-aircraft-location-interface"
+tag = "latest-develop"
 
 [dependencies.lib-common]
 git = "https://github.com/Arrow-air/lib-common.git"

@@ -36,5 +36,9 @@ features = ["grpc"]
 git      = "https://github.com/Arrow-air/lib-common.git"
 tag      = "latest-develop"
 
+[dev-dependencies.svc-gis-client-grpc]
+git = "https://github.com/Arrow-air/svc-gis"
+tag = "latest-develop"
+
 [[example]]
 name = "rest"
