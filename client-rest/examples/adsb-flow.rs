@@ -33,7 +33,7 @@ async fn mq_listener() -> Result<(), ()> {
 
     let mut consumer = mq_channel
         .basic_consume(
-            "adsb",
+            "netrid_id",
             "mq_listener",
             lapin::options::BasicConsumeOptions::default(),
             lapin::types::FieldTable::default(),
@@ -73,11 +73,11 @@ async fn adsb(url: String) {
         count += 1;
         odd_flag ^= 1;
 
-        let req = Request::builder()
+        let req: Request<Body> = Request::builder()
             .method(Method::POST)
             .uri(uri.clone())
             .header("content-type", "application/octet-stream")
-            .body(Body::from(payload.clone().to_vec()))
+            .body(hyper::body::Bytes::from(payload.to_vec()).into())
             .unwrap();
 
         match client.request(req).await {

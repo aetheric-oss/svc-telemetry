@@ -1,18 +1,7 @@
 //! Main function starting the server and initializing dependencies.
 
-use crate::grpc::start_batch_loops;
 use log::info;
-use std::collections::VecDeque;
-use std::sync::{Arc, Mutex};
-use svc_gis_client_grpc::prelude::gis::{AircraftId, AircraftPosition, AircraftVelocity};
 use svc_telemetry::*;
-
-// Telemetry will also come over gRPC
-fn create_ring<T>(config: &Config) -> Arc<Mutex<VecDeque<T>>> {
-    Arc::new(Mutex::new(VecDeque::<T>::with_capacity(
-        config.ringbuffer_size_bytes as usize / std::mem::size_of::<T>(),
-    )))
-}
 
 #[tokio::main]
 #[cfg(not(tarpaulin_include))]
@@ -40,28 +29,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         return rest::generate_openapi_spec(&target);
     }
 
-    // Initialize Ring Buffers
-    let id_ring = create_ring::<AircraftId>(&config);
-    let position_ring = create_ring::<AircraftPosition>(&config);
-    let velocity_ring = create_ring::<AircraftVelocity>(&config);
-
-    // svc-gis dump
-    start_batch_loops(
-        id_ring.clone(),
-        position_ring.clone(),
-        velocity_ring.clone(),
-        &config,
-    );
-
     let grpc_clients = grpc::client::GrpcClients::default(config.clone());
 
     // REST Server
     tokio::spawn(rest::server::rest_server(
         config.clone(),
         grpc_clients,
-        id_ring.clone(),
-        position_ring.clone(),
-        velocity_ring.clone(),
         None,
     ));
 

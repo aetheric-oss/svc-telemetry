@@ -80,3 +80,5 @@ Lcov
 vrate
 gnss
 mavlink
+lpush
+postgis

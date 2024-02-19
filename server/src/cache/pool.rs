@@ -2,26 +2,40 @@
 
 use core::fmt::{Debug, Formatter};
 use deadpool_redis::{redis, Pool, Runtime};
+use serde::Serialize;
 use snafu::prelude::Snafu;
 
 /// Represents a pool of connections to a Redis server.
 ///
-/// The [`RedisPool`] struct provides a managed pool of connections to a Redis server.
+/// The [`TelemetryPool`] struct provides a managed pool of connections to a Redis server.
 /// It allows clients to acquire and release connections from the pool and handles
 /// connection management, such as connection pooling and reusing connections.
 #[derive(Clone)]
-pub struct RedisPool {
+pub struct TelemetryPool {
     /// The underlying pool of Redis connections.
     pool: Pool,
     /// The string prepended to the key being stored.
     key_folder: String,
 }
 
-impl Debug for RedisPool {
+/// Represents a pool of connections to a Redis server for GIS-related data
+#[derive(Clone)]
+pub struct GisPool {
+    /// The underlying pool of Redis connections.
+    pool: Pool,
+}
+
+impl Debug for TelemetryPool {
     fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
-        f.debug_struct("RedisPool")
+        f.debug_struct("TelemetryPool")
             .field("key_folder", &self.key_folder)
             .finish()
+    }
+}
+
+impl Debug for GisPool {
+    fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
+        f.debug_struct("GisPool").finish()
     }
 }
 
@@ -41,8 +55,82 @@ pub enum CacheError {
     OperationFailed,
 }
 
-impl RedisPool {
-    /// Create a new RedisPool
+impl GisPool {
+    /// Create a new GisPool
+    pub async fn new(config: crate::config::Config) -> Result<Self, ()> {
+        let cfg: deadpool_redis::Config = config.redis;
+        let Some(details) = cfg.url.clone() else {
+            cache_error!("(GisPool new) no connection address found.");
+            return Err(());
+        };
+
+        cache_info!("(GisPool new) creating pool at {:?}...", details);
+
+        match cfg.create_pool(Some(Runtime::Tokio1)) {
+            Ok(pool) => {
+                cache_info!("(GisPool new) pool created.");
+                Ok(GisPool { pool })
+            }
+            Err(e) => {
+                cache_error!("(GisPool new) could not create pool: {}", e);
+                Err(())
+            }
+        }
+    }
+
+    /// Push items onto a redis queue
+    pub async fn push<T>(&mut self, item: T, queue_key: &str) -> Result<(), ()>
+    where
+        T: Serialize + Debug,
+    {
+        let Ok(serialized) = serde_json::to_vec(&item) else {
+            cache_error!("(push) could not serialize item: {:?}", item);
+            return Err(());
+        };
+
+        let mut connection = match self.pool.get().await {
+            Ok(connection) => connection,
+            Err(e) => {
+                cache_error!("(push_multiple) could not connect to redis deadpool: {e}");
+                return Err(());
+            }
+        };
+
+        let result = redis::pipe()
+            .atomic()
+            .lpush(queue_key, serialized)
+            .query_async(&mut connection)
+            .await;
+
+        match result {
+            Ok(redis::Value::Bulk(values)) => {
+                if values.len() == 1 {
+                    Ok(())
+                } else {
+                    cache_error!(
+                        "(push) Operation failed, unexpected redis response: {:?}",
+                        values
+                    );
+                    Err(())
+                }
+            }
+            Ok(value) => {
+                cache_error!(
+                    "(push_multiple) Operation failed, unexpected redis response: {:?}",
+                    value
+                );
+                Err(())
+            }
+            Err(e) => {
+                cache_error!("(push_multiple) Operation failed, redis error: {}", e);
+                Err(())
+            }
+        }
+    }
+}
+
+impl TelemetryPool {
+    /// Create a new TelemetryPool
     /// The 'key_folder' argument is prepended to the key being stored. The
     ///  complete key will take the format \<folder\>:\<subset\>:\<subset\>:\<key\>.
     ///  This is used to differentiate keys inserted into Redis by different
@@ -52,25 +140,25 @@ impl RedisPool {
         // the .env file must have REDIS__URL="redis://\<host\>:\<port\>"
         let cfg: deadpool_redis::Config = config.redis;
         let Some(details) = cfg.url.clone() else {
-            cache_error!("(RedisPool new) no connection address found.");
+            cache_error!("(TelemetryPool new) no connection address found.");
             return Err(());
         };
 
         cache_info!(
-            "(RedisPool new) creating pool with key folder '{}' at {:?}...",
+            "(TelemetryPool new) creating pool with key folder '{}' at {:?}...",
             key_folder,
             details
         );
         match cfg.create_pool(Some(Runtime::Tokio1)) {
             Ok(pool) => {
-                cache_info!("(RedisPool new) pool created.");
-                Ok(RedisPool {
+                cache_info!("(TelemetryPool new) pool created.");
+                Ok(TelemetryPool {
                     pool,
                     key_folder: String::from(key_folder),
                 })
             }
             Err(e) => {
-                cache_error!("(RedisPool new) could not create pool: {}", e);
+                cache_error!("(TelemetryPool new) could not create pool: {}", e);
                 Err(())
             }
         }

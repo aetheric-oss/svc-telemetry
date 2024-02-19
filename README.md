@@ -39,10 +39,6 @@ To ensure consistent build and test outputs, Arrow provides a Docker image with 
 Using the Makefile, you can easily test and build your code.
 
 ```bash
-#
-# Append a JWT_SECRET variable to your .env file (NOT .env.base or .env.repo)
-#
-
 # Build Locally
 make rust-build
 

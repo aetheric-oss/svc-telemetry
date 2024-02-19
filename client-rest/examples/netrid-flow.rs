@@ -1,9 +1,52 @@
 //! Simulates a flow of ADS-B with multiple reporters
 
-use hyper::{Body, Client, Method, Request, StatusCode};
+use futures_lite::stream::StreamExt;
+use hyper::{body::Bytes, Body, Client, Method, Request, StatusCode};
 use lib_common::grpc::get_endpoint_from_env;
 use packed_struct::PackedStruct;
+use svc_gis_client_grpc::prelude::types::AircraftId;
 use svc_telemetry_client_rest::netrid_types::*;
+
+async fn mq_listener() -> Result<(), ()> {
+    let mq_addr = format!("amqp://rabbitmq:5672");
+
+    // Establish connection to RabbitMQ node
+    println!("(mq_listener) connecting to MQ server at {}...", mq_addr);
+    let mq_connection =
+        lapin::Connection::connect(&mq_addr, lapin::ConnectionProperties::default())
+            .await
+            .map_err(|e| {
+                println!("(mq_listener) could not connect to MQ server at {mq_addr}.");
+                println!("(mq_listener) error: {:?}", e);
+            })?;
+
+    // Create channel
+    println!("(mq_listener) creating channel at {}...", mq_addr);
+    let mq_channel = mq_connection.create_channel().await.map_err(|e| {
+        println!("(mq_listener) could not create channel at {mq_addr}.");
+        println!("(mq_listener) error: {:?}", e);
+    })?;
+
+    let mut consumer = mq_channel
+        .basic_consume(
+            "netrid_id",
+            "mq_listener",
+            lapin::options::BasicConsumeOptions::default(),
+            lapin::types::FieldTable::default(),
+        )
+        .await
+        .unwrap();
+
+    while let Some(delivery) = consumer.next().await {
+        if let Ok(id) = serde_json::from_slice::<AircraftId>(&delivery.unwrap().data) {
+            println!("id: {:?}", id);
+        } else {
+            println!("error: could not deserialize id message");
+        }
+    }
+
+    Ok(())
+}
 
 async fn netrid(reporter: i32, url: String) -> () {
     let client = Client::builder()
@@ -56,8 +99,8 @@ async fn netrid(reporter: i32, url: String) -> () {
     let req = Request::builder()
         .method(Method::GET)
         .uri(format!("{url}/telemetry/login"))
-        .header("content-type", "application/json")
-        .body(Body::empty())
+        .header("content-type", "text/plain")
+        .body(Bytes::from(identifier.clone()).into())
         .unwrap();
 
     let resp = match client.request(req).await {
@@ -77,8 +120,8 @@ async fn netrid(reporter: i32, url: String) -> () {
     let body = resp.into_body();
     let token = hyper::body::to_bytes(body).await.unwrap();
     let token = String::from_utf8(token.to_vec()).unwrap();
-    let token = token.trim_matches('"');
-    println!("Token: {:?}", token);
+    let token = token.trim_matches('"').replace("\"", "");
+    println!("Token: {}", token);
 
     for _ in 0..10 {
         let req = Request::builder()
@@ -86,7 +129,7 @@ async fn netrid(reporter: i32, url: String) -> () {
             .uri(uri.clone())
             .header("content-type", "application/octet-stream")
             .header("Authorization", format!("Bearer {token}"))
-            .body(Body::from(payload.clone().to_vec()))
+            .body(Bytes::from(payload.to_vec()).into())
             .unwrap();
 
         match client.request(req).await {
@@ -120,6 +163,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         tokio::spawn(netrid(x, url.clone()));
         std::thread::sleep(std::time::Duration::from_millis(225)); // slight lag
     }
+
+    let _ = mq_listener().await;
 
     std::thread::sleep(std::time::Duration::from_secs(10));
 
