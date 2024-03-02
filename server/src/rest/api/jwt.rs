@@ -171,7 +171,7 @@ where
     rest_info!("(auth) authenticating request.");
     let token = get_token_from_cookie_jar(&req, &cookie_jar)?;
 
-    rest_debug!("(auth) request token: {token}");
+    // rest_debug!("(auth) request token: {token}");
     let claim = Claim::decode(token).map_err(|e| {
         rest_warn!("(auth) could not decode token: {e}");
         let json_error = ErrorResponse {
