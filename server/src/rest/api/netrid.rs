@@ -11,7 +11,7 @@ use crate::msg::netrid::{
 use svc_gis_client_grpc::prelude::types::*;
 
 use axum::{body::Bytes, extract::Extension, Json};
-use chrono::{DateTime, Utc};
+use chrono::Utc;
 use hyper::StatusCode;
 use packed_struct::PackedStruct;
 use std::cmp::Ordering;
@@ -79,6 +79,8 @@ async fn process_basic_message(
             StatusCode::INTERNAL_SERVER_ERROR
         })?;
 
+    rest_debug!("(process_basic_message) pushed aircraft id to redis.");
+
     //
     // Send Telemetry to RabbitMQ
     //
@@ -95,6 +97,8 @@ async fn process_basic_message(
             .map_err(|e| {
                 rest_warn!("(process_basic_message) could not push aircraft id to RabbitMQ: {e}.");
             });
+
+        rest_debug!("(process_basic_message) pushed aircraft id to RabbitMQ.");
     } else {
         rest_warn!("(process_basic_message) could not serialize id item.");
     }
@@ -130,7 +134,7 @@ async fn process_location_message(
         return Err(StatusCode::BAD_REQUEST);
     };
 
-    let timestamp_asset: Option<DateTime<Utc>> = match message.decode_timestamp() {
+    let timestamp_asset = match message.decode_timestamp() {
         Ok(ts) => Some(ts),
         Err(_) => None,
     };
@@ -167,6 +171,8 @@ async fn process_location_message(
             StatusCode::INTERNAL_SERVER_ERROR
         })?; // TODO(R5): Do we want to bail here or still send the velocity to postgis?
 
+    rest_debug!("(process_basic_message) pushed aircraft position to redis.");
+
     let _ = gis_pool
         .push::<AircraftVelocity>(velocity_item.clone(), REDIS_KEY_AIRCRAFT_VELOCITY)
         .await
@@ -174,6 +180,8 @@ async fn process_location_message(
             rest_warn!("(process_basic_message) could not push aircraft velocity to cache.");
             // StatusCode::INTERNAL_SERVER_ERROR
         });
+
+    rest_debug!("(process_basic_message) pushed aircraft velocity to redis.");
 
     //
     // Send Telemetry to RabbitMQ
@@ -191,6 +199,8 @@ async fn process_location_message(
             .map_err(|e| {
                 rest_warn!("(process_basic_message) could not push aircraft id to RabbitMQ: {e}.");
             });
+
+        rest_debug!("(process_basic_message) pushed aircraft position to RabbitMQ.");
     } else {
         rest_warn!("(process_basic_message) could not serialize position item.");
     }
@@ -211,6 +221,8 @@ async fn process_location_message(
             .map_err(|e| {
                 rest_warn!("(process_basic_message) could not push aircraft id to RabbitMQ: {e}.");
             });
+
+        rest_debug!("(process_basic_message) pushed aircraft position to RabbitMQ.");
     } else {
         rest_warn!("(process_basic_message) could not serialize velocity item.");
     }

@@ -1,5 +1,5 @@
 /// Network Remote ID
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, Duration, Timelike, Utc};
 use packed_struct::prelude::packed_bits::Bits;
 use packed_struct::prelude::*;
 
@@ -560,12 +560,42 @@ pub enum LocationDecodeError {
     UnknownTimestamp,
 }
 
+/// Errors decoding a location message
+#[derive(PartialEq, Copy, Clone, Debug)]
+pub enum LocationEncodeError {
+    /// Track angle is larger than
+    InvalidTrackAngle,
+
+    /// Supplied ground speed was negative
+    NegativeGroundSpeed,
+
+    /// Unknown timestamp
+    UnknownTimestamp,
+}
+
 impl LocationMessage {
     /// Decode the direction
     pub fn decode_direction(&self) -> u16 {
         match self.ew_direction {
             EastWestDirection::East => self.track_direction as u16,
             EastWestDirection::West => self.track_direction as u16 + 180,
+        }
+    }
+
+    /// Encode the direction
+    pub fn encode_direction(
+        direction: u16,
+    ) -> Result<(EastWestDirection, u8), LocationEncodeError> {
+        if direction >= 360 {
+            return Err(LocationEncodeError::InvalidTrackAngle);
+        }
+
+        let direction = direction as u8;
+
+        if direction < 180 {
+            Ok((EastWestDirection::East, direction))
+        } else {
+            Ok((EastWestDirection::West, direction - 180))
         }
     }
 
@@ -578,6 +608,11 @@ impl LocationMessage {
         }
 
         Ok(altitude)
+    }
+
+    /// Encode the altitude
+    pub fn encode_altitude(altitude: f32) -> u16 {
+        ((altitude + 1000.0) * 2.0) as u16
     }
 
     /// Decode the speed in meters per second
@@ -600,6 +635,25 @@ impl LocationMessage {
         }
     }
 
+    /// Encode the speed in meters per second
+    pub fn encode_speed(speed: f32) -> Result<(SpeedMultiplier, u8), LocationEncodeError> {
+        static THRESHOLD: f32 = 255.0 / 4.0; // 255 * 0.25
+
+        // TODO(R5): What if facing a direction but moving backwards due to wind?
+        // Casting to a u8 here would eliminate sign data
+        if speed < 0.0 {
+            return Err(LocationEncodeError::NegativeGroundSpeed);
+        }
+
+        if speed <= THRESHOLD {
+            Ok((SpeedMultiplier::X0_25, (speed * 4.0) as u8))
+        } else if speed > THRESHOLD && speed < 254.25 {
+            Ok((SpeedMultiplier::X0_75, ((speed - THRESHOLD) / 0.75) as u8))
+        } else {
+            Ok((SpeedMultiplier::X0_75, 254))
+        }
+    }
+
     /// Decode the vertical speed in meters per second
     pub fn decode_vertical_speed(&self) -> Result<f32, LocationDecodeError> {
         let mut speed = (self.vertical_speed as f32) * 0.5;
@@ -617,9 +671,19 @@ impl LocationMessage {
         Ok(speed)
     }
 
+    /// Encode the vertical speed
+    pub fn encode_vertical_speed(speed: f32) -> i8 {
+        (speed * 2.0) as i8
+    }
+
     /// Decode the latitude
     pub fn decode_latitude(&self) -> f64 {
         self.latitude as f64 * 1e-7
+    }
+
+    /// Encode the latitude
+    pub fn encode_latitude(latitude: f64) -> i32 {
+        (latitude * 1e7) as i32
     }
 
     /// Decode the longitude
@@ -627,13 +691,52 @@ impl LocationMessage {
         self.longitude as f64 * 1e-7
     }
 
-    /// Decode the timestamp
-    pub fn decode_timestamp(&self) -> Result<DateTime<Utc>, LocationDecodeError> {
-        // TODO(R5): Aircraft timestamp decode
-        Err(LocationDecodeError::UnknownTimestamp)
+    /// Encode the longitude
+    pub fn encode_longitude(longitude: f64) -> i32 {
+        (longitude * 1e7) as i32
     }
 
-    // TODO(R5) encode implementations
+    /// Decode the timestamp
+    pub fn decode_timestamp(&self) -> Result<DateTime<Utc>, LocationDecodeError> {
+        // The timestamp is encoded as the number of
+        let now = Utc::now();
+        let Some(current_hour) = now
+            .with_minute(0)
+            .and_then(|x| x.with_second(0))
+            .and_then(|x| x.with_nanosecond(0))
+        else {
+            return Err(LocationDecodeError::UnknownTimestamp);
+        };
+
+        let ms_since_hour = (now - current_hour).num_milliseconds();
+        let tenths_since_hour = (ms_since_hour / 100) as u16; // 36000 is max value, so safe to cast
+
+        let encoded_duration_ms = Duration::milliseconds(self.timestamp as i64 * 100);
+
+        let timestamp = if self.timestamp > tenths_since_hour {
+            // the encoded timestamp refers to tenths of seconds since the previous hour
+            (current_hour - Duration::hours(1)) + encoded_duration_ms
+        } else {
+            // the encoded timestamp refers to tenths of seconds since the current hour
+            current_hour + encoded_duration_ms
+        };
+
+        Ok(timestamp)
+    }
+
+    /// Encode the timestamp
+    pub fn encode_timestamp(timestamp: DateTime<Utc>) -> Result<u16, LocationEncodeError> {
+        let Some(current_hour) = timestamp
+            .with_minute(0)
+            .and_then(|x| x.with_second(0))
+            .and_then(|x| x.with_nanosecond(0))
+        else {
+            return Err(LocationEncodeError::UnknownTimestamp);
+        };
+
+        let duration_since_hour = timestamp - current_hour;
+        Ok((duration_since_hour.num_milliseconds() / 100) as u16) // to get tenths of seconds
+    }
 }
 
 #[cfg(test)]
@@ -700,43 +803,55 @@ mod tests {
     }
 
     #[test]
-    fn test_location_decode() {
-        let mut msg = LocationMessage {
+    fn test_location_encode_decode() {
+        let actual_latitude = 54.0;
+        let actual_longitude = 5.0;
+        let actual_speed = 30.0;
+        let actual_vertical_speed = 0.0;
+        let actual_altitude = 102.0;
+
+        let actual_timestamp = Utc::now();
+        let actual_track_direction = 190;
+
+        let (ew_direction, track_direction) =
+            LocationMessage::encode_direction(actual_track_direction).unwrap();
+        let (speed_multiplier, speed) = LocationMessage::encode_speed(actual_speed).unwrap();
+        let vertical_speed = LocationMessage::encode_vertical_speed(actual_vertical_speed);
+        let latitude = LocationMessage::encode_latitude(actual_latitude);
+        let longitude = LocationMessage::encode_longitude(actual_longitude);
+        let pressure_altitude = LocationMessage::encode_altitude(actual_altitude);
+        let timestamp = LocationMessage::encode_timestamp(actual_timestamp).unwrap();
+
+        let msg = LocationMessage {
             operational_status: OperationalStatus::Airborne,
             reserved_0: 0.into(),
             height_type: HeightType::AboveTakeoff,
-            ew_direction: EastWestDirection::East,
-            speed_multiplier: SpeedMultiplier::X0_25,
-            track_direction: 10,
-            speed: 30,
-            vertical_speed: 0,
-            latitude: -123456789,
-            longitude: 123456789,
-            pressure_altitude: 0,
+            ew_direction,
+            track_direction,
+            speed_multiplier,
+            speed,
+            vertical_speed,
+            latitude,
+            longitude,
+            pressure_altitude,
             geodetic_altitude: 0,
             height: 0,
-            vertical_accuracy: VerticalAccuracyMeters::Lt150,
-            horizontal_accuracy: HorizontalAccuracyMeters::Lt1852,
-            barometric_altitude_accuracy: VerticalAccuracyMeters::Lt150,
-            speed_accuracy: SpeedAccuracyMetersPerSecond::Lt10,
-            timestamp: 0,
+            vertical_accuracy: VerticalAccuracyMeters::Lt1,
+            horizontal_accuracy: HorizontalAccuracyMeters::Lt1,
+            barometric_altitude_accuracy: VerticalAccuracyMeters::Lt1,
+            speed_accuracy: SpeedAccuracyMetersPerSecond::Lt1,
+            timestamp,
             reserved_1: 0.into(),
             timestamp_accuracy: 0.into(),
             reserved_2: 0,
         };
 
-        // Direction
-        assert_eq!(msg.decode_direction(), 10);
-        msg.ew_direction = EastWestDirection::West;
-        assert_eq!(msg.decode_direction(), 190);
-
-        // Altitude
-        msg.pressure_altitude = 0;
-        assert_eq!(
-            msg.decode_altitude(),
-            Err(LocationDecodeError::UnknownAltitude)
-        );
-        msg.pressure_altitude = 1000;
-        assert_eq!(msg.decode_altitude(), Ok(-500.0));
+        assert_eq!(msg.decode_direction(), actual_track_direction);
+        assert_eq!(msg.decode_speed(), Ok(actual_speed));
+        assert_eq!(msg.decode_vertical_speed(), Ok(actual_vertical_speed));
+        assert_eq!(msg.decode_latitude(), actual_latitude);
+        assert_eq!(msg.decode_longitude(), actual_longitude);
+        assert_eq!(msg.decode_altitude(), Ok(actual_altitude));
+        assert!(msg.decode_timestamp().unwrap() - actual_timestamp < Duration::milliseconds(10));
     }
 }
