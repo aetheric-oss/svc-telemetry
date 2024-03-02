@@ -11,7 +11,7 @@ use crate::msg::netrid::{
 use svc_gis_client_grpc::prelude::types::*;
 
 use axum::{body::Bytes, extract::Extension, Json};
-use chrono::{DateTime, Utc};
+use chrono::Utc;
 use hyper::StatusCode;
 use packed_struct::PackedStruct;
 use std::cmp::Ordering;
@@ -64,6 +64,9 @@ async fn process_basic_message(
         return Err(StatusCode::BAD_REQUEST);
     };
 
+    // Aircraft IDs may have leading or trailing whitespace
+    let identifier = identifier.trim().to_string();
+
     let id_item = AircraftId {
         identifier,
         aircraft_type,
@@ -78,6 +81,8 @@ async fn process_basic_message(
             rest_warn!("(process_basic_message) could not push aircraft id to cache.");
             StatusCode::INTERNAL_SERVER_ERROR
         })?;
+
+    rest_debug!("(process_basic_message) pushed aircraft id to redis.");
 
     //
     // Send Telemetry to RabbitMQ
@@ -95,6 +100,8 @@ async fn process_basic_message(
             .map_err(|e| {
                 rest_warn!("(process_basic_message) could not push aircraft id to RabbitMQ: {e}.");
             });
+
+        rest_debug!("(process_basic_message) pushed aircraft id to RabbitMQ.");
     } else {
         rest_warn!("(process_basic_message) could not serialize id item.");
     }
@@ -116,21 +123,21 @@ async fn process_location_message(
     //
 
     let Ok(altitude_meters) = message.decode_altitude() else {
-        rest_warn!("(process_basic_message) could not parse altitude.");
+        rest_warn!("(process_location_message) could not parse altitude.");
         return Err(StatusCode::BAD_REQUEST);
     };
 
     let Ok(velocity_horizontal_ground_mps) = message.decode_speed() else {
-        rest_warn!("(process_basic_message) could not parse speed.");
+        rest_warn!("(process_location_message) could not parse speed.");
         return Err(StatusCode::BAD_REQUEST);
     };
 
     let Ok(velocity_vertical_mps) = message.decode_vertical_speed() else {
-        rest_warn!("(process_basic_message) could not parse vertical speed.");
+        rest_warn!("(process_location_message) could not parse vertical speed.");
         return Err(StatusCode::BAD_REQUEST);
     };
 
-    let timestamp_asset: Option<DateTime<Utc>> = match message.decode_timestamp() {
+    let timestamp_asset = match message.decode_timestamp() {
         Ok(ts) => Some(ts),
         Err(_) => None,
     };
@@ -159,21 +166,28 @@ async fn process_location_message(
         timestamp_network: Utc::now(),
     };
 
+    // rest_debug!("(process_location_message) position item: {:#?}", position_item);
+    // rest_debug!("(process_location_message) velocity item: {:#?}", velocity_item);
+
     gis_pool
         .push::<AircraftPosition>(position_item.clone(), REDIS_KEY_AIRCRAFT_POSITION)
         .await
         .map_err(|_| {
-            rest_warn!("(process_basic_message) could not push aircraft position to cache.");
+            rest_warn!("(process_location_message) could not push aircraft position to cache.");
             StatusCode::INTERNAL_SERVER_ERROR
         })?; // TODO(R5): Do we want to bail here or still send the velocity to postgis?
+
+    rest_debug!("(process_location_message) pushed aircraft position to redis.");
 
     let _ = gis_pool
         .push::<AircraftVelocity>(velocity_item.clone(), REDIS_KEY_AIRCRAFT_VELOCITY)
         .await
         .map_err(|_| {
-            rest_warn!("(process_basic_message) could not push aircraft velocity to cache.");
+            rest_warn!("(process_location_message) could not push aircraft velocity to cache.");
             // StatusCode::INTERNAL_SERVER_ERROR
         });
+
+    rest_debug!("(process_location_message) pushed aircraft velocity to redis.");
 
     //
     // Send Telemetry to RabbitMQ
@@ -189,10 +203,14 @@ async fn process_location_message(
             )
             .await
             .map_err(|e| {
-                rest_warn!("(process_basic_message) could not push aircraft id to RabbitMQ: {e}.");
+                rest_warn!(
+                    "(process_location_message) could not push aircraft id to RabbitMQ: {e}."
+                );
             });
+
+        rest_debug!("(process_location_message) pushed aircraft position to RabbitMQ.");
     } else {
-        rest_warn!("(process_basic_message) could not serialize position item.");
+        rest_warn!("(process_location_message) could not serialize position item.");
     }
 
     //
@@ -209,10 +227,14 @@ async fn process_location_message(
             )
             .await
             .map_err(|e| {
-                rest_warn!("(process_basic_message) could not push aircraft id to RabbitMQ: {e}.");
+                rest_warn!(
+                    "(process_location_message) could not push aircraft id to RabbitMQ: {e}."
+                );
             });
+
+        rest_debug!("(process_location_message) pushed aircraft position to RabbitMQ.");
     } else {
-        rest_warn!("(process_basic_message) could not serialize velocity item.");
+        rest_warn!("(process_location_message) could not serialize velocity item.");
     }
 
     Ok(())
@@ -245,36 +267,44 @@ pub async fn network_remote_id(
         StatusCode::BAD_REQUEST
     })?;
 
-    let key = crate::cache::bytes_to_key(&payload);
-    let count = tlm_pools
-        .netrid
-        .increment(&key, CACHE_EXPIRE_MS_NETRID)
-        .await
-        .map_err(|_| {
-            rest_warn!("(network_remote_id) could not increment key.");
-            StatusCode::INTERNAL_SERVER_ERROR
-        })?;
-
-    match count.cmp(&N_REPORTERS_NEEDED) {
-        Ordering::Less => {
-            rest_error!("(network_remote_id) netrid reporter count should be impossible: {count}.");
-            return Err(StatusCode::INTERNAL_SERVER_ERROR);
-        }
-        Ordering::Greater => {
-            rest_info!(
-                "(network_remote_id) netrid reporter count is greater than needed: {count}."
-            );
-
-            // TODO(R4) push up to N reporter confirmations to svc-storage with user_ids
-            return Ok(Json(count));
-        }
-        _ => (), // continue
-    }
-
     let Ok(frame) = Frame::unpack(&payload) else {
         rest_warn!("(network_remote_id) could not parse payload.");
         return Err(StatusCode::BAD_REQUEST);
     };
+
+    // TODO(R5): Temporary workaround - basic messages
+    //  don't have a timestamp or other counter to differentiate
+    //  from otherwise identical messages.
+    let mut count = 1;
+    if frame.header.message_type != MessageType::Basic {
+        let key = crate::cache::bytes_to_key(&payload);
+        count = tlm_pools
+            .netrid
+            .increment(&key, CACHE_EXPIRE_MS_NETRID)
+            .await
+            .map_err(|_| {
+                rest_warn!("(network_remote_id) could not increment key.");
+                StatusCode::INTERNAL_SERVER_ERROR
+            })?;
+
+        match count.cmp(&N_REPORTERS_NEEDED) {
+            Ordering::Less => {
+                rest_error!(
+                    "(network_remote_id) netrid reporter count should be impossible: {count}."
+                );
+                return Err(StatusCode::INTERNAL_SERVER_ERROR);
+            }
+            Ordering::Greater => {
+                rest_info!(
+                    "(network_remote_id) netrid reporter count is greater than needed: {count}."
+                );
+
+                // TODO(R4) push up to N reporter confirmations to svc-storage with user_ids
+                return Ok(Json(count));
+            }
+            _ => (), // continue
+        }
+    }
 
     let identifier = claim.sub;
 
