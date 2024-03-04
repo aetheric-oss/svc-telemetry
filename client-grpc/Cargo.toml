@@ -2,7 +2,7 @@
 description = "Arrow telemetry service gRPC client"
 keywords    = ["vtol", "client", "grpc", "telemetry"] # max 5
 name        = "svc-telemetry-client-grpc"
-version     = "0.2.1-develop.0"
+version     = "0.2.1-develop.1"
 
 authors.workspace      = true
 categories.workspace   = true
