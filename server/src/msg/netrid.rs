@@ -590,12 +590,10 @@ impl LocationMessage {
             return Err(LocationEncodeError::InvalidTrackAngle);
         }
 
-        let direction = direction as u8;
-
         if direction < 180 {
-            Ok((EastWestDirection::East, direction))
+            Ok((EastWestDirection::East, direction as u8))
         } else {
-            Ok((EastWestDirection::West, direction - 180))
+            Ok((EastWestDirection::West, (direction - 180) as u8))
         }
     }
 
