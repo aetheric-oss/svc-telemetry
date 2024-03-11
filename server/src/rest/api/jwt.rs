@@ -70,7 +70,14 @@ impl Claim {
             return Err(StatusCode::INTERNAL_SERVER_ERROR);
         };
 
-        let exp = (Utc::now() + Duration::seconds(JWT_EXPIRE_SECONDS)).timestamp();
+        let Some(delta) = Duration::try_seconds(JWT_EXPIRE_SECONDS) else {
+            rest_error!(
+                "(Claim::create) could not create duration from {JWT_EXPIRE_SECONDS} seconds."
+            );
+            return Err(StatusCode::INTERNAL_SERVER_ERROR);
+        };
+
+        let exp = (Utc::now() + delta).timestamp();
         let Ok(exp) = <usize>::try_from(exp) else {
             rest_error!("(Claim::create) could not convert EXP timestamp {exp} to usize.");
             return Err(StatusCode::INTERNAL_SERVER_ERROR);

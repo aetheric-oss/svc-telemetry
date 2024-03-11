@@ -84,7 +84,8 @@ async fn gis_identifier_push(
     };
 
     let item = AircraftId {
-        identifier,
+        identifier: Some(identifier),
+        session_id: None,
         aircraft_type,
         timestamp_network: Utc::now(),
         timestamp_asset: None,

@@ -3345,8 +3345,8 @@ checksum = "81cdd64d312baedb58e21336b31bc043b77e01cc99033ce76ef539f78e965ebc"
 
 [[package]]
 name = "svc-gis"
-version = "0.1.1-develop.5"
-source = "git+https://github.com/Arrow-air/svc-gis?tag=latest-develop#9eeb3400046d743b1ba6ecf9609b8bf509a979c2"
+version = "0.1.1-develop.6"
+source = "git+https://github.com/Arrow-air/svc-gis?tag=latest-develop#e544755a93046acb019957d6f6b7e3005221b448"
 dependencies = [
  "anyhow",
  "axum",
@@ -3393,8 +3393,8 @@ dependencies = [
 
 [[package]]
 name = "svc-gis-client-grpc"
-version = "0.1.1-develop.5"
-source = "git+https://github.com/Arrow-air/svc-gis?tag=latest-develop#9eeb3400046d743b1ba6ecf9609b8bf509a979c2"
+version = "0.1.1-develop.6"
+source = "git+https://github.com/Arrow-air/svc-gis?tag=latest-develop#e544755a93046acb019957d6f6b7e3005221b448"
 dependencies = [
  "cfg-if",
  "chrono",

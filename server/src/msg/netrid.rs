@@ -709,11 +709,18 @@ impl LocationMessage {
         let ms_since_hour = (now - current_hour).num_milliseconds();
         let tenths_since_hour = (ms_since_hour / 100) as u16; // 36000 is max value, so safe to cast
 
-        let encoded_duration_ms = Duration::milliseconds(self.timestamp as i64 * 100);
+        let Some(encoded_duration_ms) = Duration::try_milliseconds(self.timestamp as i64 * 100)
+        else {
+            return Err(LocationDecodeError::UnknownTimestamp);
+        };
+
+        let Some(delta) = Duration::try_hours(1) else {
+            return Err(LocationDecodeError::UnknownTimestamp);
+        };
 
         let timestamp = if self.timestamp > tenths_since_hour {
             // the encoded timestamp refers to tenths of seconds since the previous hour
-            (current_hour - Duration::hours(1)) + encoded_duration_ms
+            (current_hour - delta) + encoded_duration_ms
         } else {
             // the encoded timestamp refers to tenths of seconds since the current hour
             current_hour + encoded_duration_ms
@@ -850,6 +857,9 @@ mod tests {
         assert_eq!(msg.decode_latitude(), actual_latitude);
         assert_eq!(msg.decode_longitude(), actual_longitude);
         assert_eq!(msg.decode_altitude(), Ok(actual_altitude));
-        assert!(msg.decode_timestamp().unwrap() - actual_timestamp < Duration::milliseconds(10));
+        assert!(
+            msg.decode_timestamp().unwrap() - actual_timestamp
+                < Duration::try_milliseconds(10).unwrap()
+        );
     }
 }
