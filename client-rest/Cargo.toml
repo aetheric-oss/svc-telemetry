@@ -2,7 +2,7 @@
 description = "Arrow telemetry service REST client"
 keywords    = ["vtol", "client", "rest", "telemetry"] # max 5
 name        = "svc-telemetry-client-rest"
-version     = "0.2.1-develop.2"
+version     = "0.2.1-develop.3"
 
 authors.workspace      = true
 categories.workspace   = true
