@@ -79,9 +79,14 @@ jobs:
         id: grpc_api_sync_s3
         run: |
           aws s3 cp ./out/${{ github.event.repository.name }}-grpc-api.json "s3://${{ secrets.AWS_S3_SERVICES_DOCS_BUCKET }}${{ env.AWS_S3_DOCS_GRPC_DEST_PATH }}${BRANCHPATH}/grpc-api.json"
+
   docker_build:
     name: Build and push Docker image
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+      packages: write
     concurrency:
       group: docker-build-${{ github.ref_name }}
     env:
