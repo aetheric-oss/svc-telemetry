@@ -67,15 +67,15 @@ uuid           = { version = "1.5", features = ["serde"] }
 
 [dependencies.svc-storage-client-grpc]
 features = ["adsb"]
-git      = "https://github.com/Arrow-air/svc-storage"
+git      = "https://github.com/aetheric-oss/svc-storage"
 tag      = "latest-develop"
 
 [dependencies.svc-gis-client-grpc]
-git = "https://github.com/Arrow-air/svc-gis"
+git = "https://github.com/aetheric-oss/svc-gis"
 tag = "latest-develop"
 
 [dependencies.lib-common]
-git = "https://github.com/Arrow-air/lib-common.git"
+git = "https://github.com/aetheric-oss/lib-common.git"
 tag = "latest-develop"
 
 [dependencies.log4rs]
