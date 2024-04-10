@@ -206,6 +206,17 @@ checksum = "3d62b7694a562cdf5a74227903507c56ab2cc8bdd1f781ed5cb4cf9c9f810bfc"
 [[package]]
 name = "arrow-macros-core"
 version = "0.2.1-develop.0"
+source = "git+https://github.com/aetheric-oss/lib-common.git?tag=latest-develop#4ccaa5c1e59f5c8dc2a5efd97b7f17e0e6fa1692"
+dependencies = [
+ "proc-macro-error",
+ "proc-macro2",
+ "quote",
+ "syn 2.0.53",
+]
+
+[[package]]
+name = "arrow-macros-core"
+version = "0.2.1-develop.0"
 source = "git+https://github.com/Arrow-air/lib-common.git?tag=latest-develop#4ccaa5c1e59f5c8dc2a5efd97b7f17e0e6fa1692"
 dependencies = [
  "proc-macro-error",
@@ -223,6 +234,16 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 2.0.53",
+]
+
+[[package]]
+name = "arrow-macros-derive"
+version = "0.2.1-develop.0"
+source = "git+https://github.com/aetheric-oss/lib-common.git?tag=latest-develop#4ccaa5c1e59f5c8dc2a5efd97b7f17e0e6fa1692"
+dependencies = [
+ "arrow-macros-core 0.2.1-develop.0 (git+https://github.com/aetheric-oss/lib-common.git?tag=latest-develop)",
+ "proc-macro-error",
+ "proc-macro2",
 ]
 
 [[package]]
@@ -1776,9 +1797,9 @@ checksum = "e2abad23fbc42b3700f2f279844dc832adb2b2eb069b2df918f455c4e18cc646"
 [[package]]
 name = "lib-common"
 version = "0.2.1-develop.0"
-source = "git+https://github.com/Arrow-air/lib-common.git?tag=latest-develop#4ccaa5c1e59f5c8dc2a5efd97b7f17e0e6fa1692"
+source = "git+https://github.com/aetheric-oss/lib-common.git?tag=latest-develop#4ccaa5c1e59f5c8dc2a5efd97b7f17e0e6fa1692"
 dependencies = [
- "arrow-macros-derive 0.2.1-develop.0 (git+https://github.com/Arrow-air/lib-common.git?tag=latest-develop)",
+ "arrow-macros-derive 0.2.1-develop.0 (git+https://github.com/aetheric-oss/lib-common.git?tag=latest-develop)",
  "cargo-husky",
  "chrono",
  "futures",
@@ -1790,6 +1811,22 @@ dependencies = [
  "tokio",
  "tonic",
  "tower",
+ "trybuild",
+]
+
+[[package]]
+name = "lib-common"
+version = "0.2.1-develop.0"
+source = "git+https://github.com/Arrow-air/lib-common.git?tag=latest-develop#4ccaa5c1e59f5c8dc2a5efd97b7f17e0e6fa1692"
+dependencies = [
+ "arrow-macros-derive 0.2.1-develop.0 (git+https://github.com/Arrow-air/lib-common.git?tag=latest-develop)",
+ "cargo-husky",
+ "chrono",
+ "futures",
+ "log",
+ "prost",
+ "prost-wkt-types",
+ "tonic",
  "trybuild",
 ]
 
@@ -3351,8 +3388,8 @@ checksum = "81cdd64d312baedb58e21336b31bc043b77e01cc99033ce76ef539f78e965ebc"
 
 [[package]]
 name = "svc-gis"
-version = "0.1.1-develop.6"
-source = "git+https://github.com/Arrow-air/svc-gis?tag=latest-develop#e544755a93046acb019957d6f6b7e3005221b448"
+version = "0.1.1-develop.9"
+source = "git+https://github.com/aetheric-oss/svc-gis?tag=latest-develop#b2bf46004ec345c4e4d38cda8d4db44e52fb7f72"
 dependencies = [
  "anyhow",
  "axum",
@@ -3367,7 +3404,7 @@ dependencies = [
  "futures",
  "geo",
  "hyper",
- "lib-common 0.2.1-develop.0 (git+https://github.com/Arrow-air/lib-common.git?tag=v0.2.1-develop.0)",
+ "lib-common 0.2.1-develop.0 (git+https://github.com/Arrow-air/lib-common.git?tag=latest-develop)",
  "log",
  "log4rs",
  "native-tls",
@@ -3399,8 +3436,8 @@ dependencies = [
 
 [[package]]
 name = "svc-gis-client-grpc"
-version = "0.1.1-develop.6"
-source = "git+https://github.com/Arrow-air/svc-gis?tag=latest-develop#e544755a93046acb019957d6f6b7e3005221b448"
+version = "0.1.1-develop.9"
+source = "git+https://github.com/aetheric-oss/svc-gis?tag=latest-develop#b2bf46004ec345c4e4d38cda8d4db44e52fb7f72"
 dependencies = [
  "cfg-if",
  "chrono",
@@ -3422,8 +3459,8 @@ dependencies = [
 
 [[package]]
 name = "svc-storage"
-version = "0.11.1-develop.7"
-source = "git+https://github.com/Arrow-air/svc-storage?tag=latest-develop#8baec86c3ae5233a36210810ccc5226cfa323a64"
+version = "0.11.1-develop.11"
+source = "git+https://github.com/aetheric-oss/svc-storage?tag=latest-develop#fb4be1fcc27cb9391a5bfc21490968a418f6f87b"
 dependencies = [
  "anyhow",
  "byteorder",
@@ -3437,7 +3474,6 @@ dependencies = [
  "deadpool-postgres",
  "dotenv",
  "futures",
- "geo-types",
  "hyper",
  "lazy_static",
  "lib-common 0.2.1-develop.0 (git+https://github.com/Arrow-air/lib-common.git?tag=latest-develop)",
@@ -3470,13 +3506,12 @@ dependencies = [
 
 [[package]]
 name = "svc-storage-client-grpc"
-version = "0.11.1-develop.7"
-source = "git+https://github.com/Arrow-air/svc-storage?tag=latest-develop#8baec86c3ae5233a36210810ccc5226cfa323a64"
+version = "0.11.1-develop.11"
+source = "git+https://github.com/aetheric-oss/svc-storage?tag=latest-develop#fb4be1fcc27cb9391a5bfc21490968a418f6f87b"
 dependencies = [
  "anyhow",
  "cfg-if",
  "futures",
- "geo-types",
  "lazy_static",
  "lib-common 0.2.1-develop.0 (git+https://github.com/Arrow-air/lib-common.git?tag=latest-develop)",
  "log",
@@ -3484,6 +3519,7 @@ dependencies = [
  "num-traits",
  "ordered-float 4.2.0",
  "paste",
+ "postgis",
  "prost",
  "prost-types",
  "prost-wkt-types",
@@ -3518,7 +3554,7 @@ dependencies = [
  "hyper",
  "jsonwebtoken",
  "lapin",
- "lib-common 0.2.1-develop.0 (git+https://github.com/Arrow-air/lib-common.git?tag=latest-develop)",
+ "lib-common 0.2.1-develop.0 (git+https://github.com/aetheric-oss/lib-common.git?tag=latest-develop)",
  "log",
  "log4rs",
  "logtest",
@@ -3552,7 +3588,7 @@ name = "svc-telemetry-client-grpc"
 version = "0.2.1-develop.3"
 dependencies = [
  "cfg-if",
- "lib-common 0.2.1-develop.0 (git+https://github.com/Arrow-air/lib-common.git?tag=latest-develop)",
+ "lib-common 0.2.1-develop.0 (git+https://github.com/aetheric-oss/lib-common.git?tag=latest-develop)",
  "log",
  "logtest",
  "prost",
@@ -3572,7 +3608,7 @@ dependencies = [
  "futures-lite 1.13.0",
  "hyper",
  "lapin",
- "lib-common 0.2.1-develop.0 (git+https://github.com/Arrow-air/lib-common.git?tag=latest-develop)",
+ "lib-common 0.2.1-develop.0 (git+https://github.com/aetheric-oss/lib-common.git?tag=latest-develop)",
  "ordered-float 4.2.0",
  "packed_struct",
  "serde",
