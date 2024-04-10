@@ -2,7 +2,7 @@
 description = "Telemetry Service gRPC and REST servers"
 keywords    = ["vtol", "server", "grpc", "rest", "telemetry"] # max 5
 name        = "svc-telemetry"
-version     = "0.2.1-develop.3"
+version     = "0.2.1-develop.4"
 
 authors.workspace      = true
 categories.workspace   = true
