@@ -18,8 +18,8 @@ use svc_storage_client_grpc::prelude::*;
 use svc_storage_client_grpc::resources::adsb;
 
 use axum::{body::Bytes, extract::Extension, Json};
-use chrono::Utc;
 use hyper::StatusCode;
+use lib_common::time::Utc;
 use std::cmp::Ordering;
 
 /// ADSB entries in the cache will expire after 60 seconds
@@ -56,14 +56,14 @@ struct GisVelocityData {
     // gnss_baro_diff: u16,
 }
 
-/// Pushes an aircraft identifier message to the queue
-async fn gis_identifier_push(
-    identifier: String,
-    type_coding: TypeCoding,
-    aircraft_category: u8,
-    mut gis_pool: GisPool,
-) -> Result<(), ()> {
-    let aircraft_type: AircraftType = match (type_coding, aircraft_category) {
+// Decode aircraft type from ADS-B message type coding and aircraft category
+fn get_aircraft_type(type_coding: TypeCoding, aircraft_category: u8) -> AircraftType {
+    // in type coding
+    // A = 4
+    // B = 3
+    // C = 2
+    // D = 1
+    match (type_coding, aircraft_category) {
         (TypeCoding::D, _) => AircraftType::Other,
         (_, 0) => AircraftType::Other,
         (TypeCoding::C, 1) => AircraftType::Other,
@@ -77,12 +77,24 @@ async fn gis_identifier_push(
         (TypeCoding::B, 3) => AircraftType::Unpowered,
         (TypeCoding::B, 4) => AircraftType::Glider,
         (TypeCoding::B, 5) => AircraftType::Other,
+        // (TypeCoding::B, 6) => AircraftType::Uas, // Unmanned Aerial Vehicle
         (TypeCoding::B, 7) => AircraftType::Rocket,
         (TypeCoding::A, 7) => AircraftType::Rotorcraft,
         // TODO(R5): Support other types
         _ => AircraftType::Other,
-    };
+    }
+}
 
+/// Pushes an aircraft identifier message to the queue
+#[cfg(not(tarpaulin_include))]
+// no_coverage: (R5) requires redis backend to test
+async fn gis_identifier_push(
+    identifier: String,
+    type_coding: TypeCoding,
+    aircraft_category: u8,
+    mut gis_pool: GisPool,
+) -> Result<(), ()> {
+    let aircraft_type = get_aircraft_type(type_coding, aircraft_category);
     let item = AircraftId {
         identifier: Some(identifier),
         session_id: None,
@@ -99,13 +111,15 @@ async fn gis_identifier_push(
 ///
 /// Pushes a position telemetry message to the queue
 ///
+#[cfg(not(tarpaulin_include))]
+// no_coverage: (R5) requires redis backend to test
 async fn gis_position_push(
     data: GisPositionData,
     mut tlm_pool: TelemetryPool,
     mut gis_pool: GisPool,
 ) -> Result<(), ()> {
     if data.odd_flag == CPRFormat::Odd {
-        rest_info!("(gis_position_push) received an odd flag CPR format message.");
+        rest_info!("received an odd flag CPR format message.");
         return Ok(()); // ignore even CPR format messages
     }
 
@@ -116,23 +130,20 @@ async fn gis_position_push(
     ];
 
     let n_expected_results = keys.len();
-    let Ok(results) = tlm_pool.multiple_get::<u32>(keys).await else {
-        rest_warn!("(gis_position_push) could not get packet from cache.");
-        return Err(());
-    };
+    let results = tlm_pool.multiple_get::<u32>(keys).await.map_err(|e| {
+        rest_warn!("could not get packet from cache: {e}");
+    })?;
 
     if results.len() != n_expected_results {
-        rest_warn!("(gis_position_push) unexpected result from cache.");
+        rest_warn!("unexpected result from cache.");
         return Err(());
     }
 
     let (e_lat_cpr, e_lon_cpr) = (results[0], results[1]);
-
-    let Ok((latitude, longitude)) = decode_cpr(e_lat_cpr, e_lon_cpr, data.lat_cpr, data.lon_cpr)
-    else {
-        rest_warn!("(gis_position_push) could not decode CPR.");
-        return Err(());
-    };
+    let (latitude, longitude) = decode_cpr(e_lat_cpr, e_lon_cpr, data.lat_cpr, data.lon_cpr)
+        .map_err(|e| {
+            rest_warn!("could not decode CPR: {e}");
+        })?;
 
     let identifier = format!("{:x}", data.icao);
     let item = AircraftPosition {
@@ -152,22 +163,24 @@ async fn gis_position_push(
 }
 
 /// Pushes a velocity telemetry message to the queue
+#[cfg(not(tarpaulin_include))]
+// no_coverage: (R5) requires redis backend to test
 async fn gis_velocity_push(data: GisVelocityData, mut gis_pool: GisPool) -> Result<(), ()> {
-    let Ok((velocity_horizontal_ground_mps, track_angle_degrees)) = decode_speed_direction(
+    let (velocity_horizontal_ground_mps, track_angle_degrees) = decode_speed_direction(
         data.st,
         data.ew_sign,
         data.ew_vel,
         data.ns_sign,
         data.ns_vel,
-    ) else {
-        rest_info!("(adsb) could not decode speed and direction.");
-        return Err(());
-    };
+    )
+    .map_err(|e| {
+        rest_info!("could not decode speed and direction: {e}");
+    })?;
 
-    let Ok(velocity_vertical_mps) = decode_vertical_speed(data.vrate_sign, data.vrate_value) else {
-        rest_info!("(adsb) could not decode vertical speed.");
-        return Err(());
-    };
+    let velocity_vertical_mps =
+        decode_vertical_speed(data.vrate_sign, data.vrate_value).map_err(|e| {
+            rest_info!("could not decode vertical speed: {e}");
+        })?;
 
     let item = AircraftVelocity {
         identifier: format!("{:x}", data.icao),
@@ -198,6 +211,8 @@ async fn gis_velocity_push(data: GisVelocityData, mut gis_pool: GisPool) -> Resu
         (status = 503, description = "Dependencies of svc-telemetry were down."),
     )
 )]
+#[cfg(not(tarpaulin_include))]
+// no_coverage: (R5) requires redis backend to test
 pub async fn adsb(
     Extension(mut tlm_pools): Extension<TelemetryPools>,
     Extension(gis_pool): Extension<GisPool>,
@@ -205,14 +220,14 @@ pub async fn adsb(
     Extension(grpc_clients): Extension<GrpcClients>,
     payload: Bytes,
 ) -> Result<Json<u32>, StatusCode> {
-    rest_info!("(adsb) entry.");
+    rest_info!("entry.");
     //
     // ADS-B messages are 14 bytes long, small enough for a unique key
     // If the key is not in the cache, add it
     // If the key is in the cache, increment the count
     //
     let payload = <[u8; ADSB_SIZE_BYTES]>::try_from(payload.as_ref()).map_err(|_| {
-        rest_error!("(adsb) received ads-b message not {ADSB_SIZE_BYTES} bytes.");
+        rest_error!("received ads-b message not {ADSB_SIZE_BYTES} bytes.");
         StatusCode::BAD_REQUEST
     })?;
 
@@ -222,19 +237,19 @@ pub async fn adsb(
         .increment(&key, CACHE_EXPIRE_MS_ADSB)
         .await
         .map_err(|e| {
-            rest_error!("(adsb) {e}");
+            rest_error!("{e}");
             StatusCode::INTERNAL_SERVER_ERROR
         })?;
 
     match count.cmp(&N_REPORTERS_NEEDED) {
         Ordering::Less => {
-            rest_error!("(adsb) ADS-B reporter count should be impossible: {count}.");
+            rest_error!("ADS-B reporter count should be impossible: {count}.");
             return Err(StatusCode::INTERNAL_SERVER_ERROR);
         }
         Ordering::Greater => {
-            rest_info!("(adsb) ADS-B reporter count is greater than needed: {count}.");
+            rest_info!("ADS-B reporter count is greater than needed: {count}.");
 
-            // TODO(R4) push up to N reporter confirmations to svc-storage with user_ids
+            // TODO(R5) push up to N reporter confirmations to svc-storage with user_ids
             return Ok(Json(count));
         }
         _ => (), // continue
@@ -244,13 +259,13 @@ pub async fn adsb(
     // Deconstruct Packet
     //
     let frame = adsb_deku::Frame::from_bytes((&payload, 0)).map_err(|e| {
-        rest_info!("(adsb) could not parse ads-b message: {e}");
+        rest_info!("could not parse ads-b message: {e}");
         StatusCode::BAD_REQUEST
     })?;
 
     let frame = frame.1;
     let adsb_deku::DF::ADSB(msg) = &frame.df else {
-        rest_info!("(adsb) received a non-ADSB format message.");
+        rest_info!("received a non-ADSB format message.");
         return Err(StatusCode::BAD_REQUEST);
     };
 
@@ -267,13 +282,14 @@ pub async fn adsb(
 
     match &msg.me {
         Identification(adsb_deku::adsb::Identification { tc, ca, cn }) => {
-            match gis_identifier_push(cn.clone(), *tc, *ca, gis_pool).await {
-                Ok(_) => rest_info!("(adsb) pushed position to queue."),
-                Err(_) => {
-                    rest_error!("(adsb) could not push position to queue.");
-                    return Err(StatusCode::INTERNAL_SERVER_ERROR);
-                }
-            }
+            gis_identifier_push(cn.clone(), *tc, *ca, gis_pool)
+                .await
+                .map_err(|_| {
+                    rest_error!("could not push position to queue.");
+                    StatusCode::INTERNAL_SERVER_ERROR
+                })?;
+
+            rest_info!("pushed position to queue.");
         }
         AirbornePosition(adsb_deku::Altitude {
             odd_flag,
@@ -282,10 +298,10 @@ pub async fn adsb(
             alt,
             ..
         }) => {
-            let Some(alt) = alt else {
-                rest_info!("(adsb) no altitude in packet.");
-                return Err(StatusCode::BAD_REQUEST);
-            };
+            let alt = alt.ok_or_else(|| {
+                rest_info!("no altitude in packet.");
+                StatusCode::BAD_REQUEST
+            })?;
 
             let keyvals = vec![
                 (
@@ -298,33 +314,33 @@ pub async fn adsb(
                 ),
             ];
 
-            match tlm_pools
+            tlm_pools
                 .adsb
                 .multiple_set(keyvals, CACHE_EXPIRE_MS_AIRCRAFT_CPR)
                 .await
-            {
-                Ok(_) => rest_info!("(adsb) added lat/lon to cache."),
-                Err(e) => {
-                    rest_error!("(adsb) could not add lat/lon to cache: {}.", e);
-                    return Err(StatusCode::INTERNAL_SERVER_ERROR);
-                }
-            }
+                .map_err(|e| {
+                    rest_error!("could not add lat/lon to cache: {e}");
+                    StatusCode::INTERNAL_SERVER_ERROR
+                })?;
+
+            rest_info!("added lat/lon to cache.");
 
             let data = GisPositionData {
                 icao,
                 lat_cpr: *lat_cpr,
                 lon_cpr: *lon_cpr,
-                alt: *alt,
+                alt,
                 odd_flag: *odd_flag,
             };
 
-            match gis_position_push(data, tlm_pools.adsb, gis_pool).await {
-                Ok(_) => rest_info!("(adsb) pushed position to queue."),
-                Err(_) => {
-                    rest_error!("(adsb) could not push position to queue.");
-                    return Err(StatusCode::INTERNAL_SERVER_ERROR);
-                }
-            }
+            gis_position_push(data, tlm_pools.adsb, gis_pool)
+                .await
+                .map_err(|_| {
+                    rest_error!("could not push position to queue.");
+                    StatusCode::INTERNAL_SERVER_ERROR
+                })?;
+
+            rest_info!("pushed position to queue.");
         }
         Velocity(adsb_deku::adsb::AirborneVelocity {
             st,
@@ -344,7 +360,7 @@ pub async fn adsb(
                 ns_vel,
             }) = sub_type
             else {
-                rest_info!("(adsb) no ground speed in packet.");
+                rest_info!("no ground speed in packet.");
                 return Err(StatusCode::NOT_IMPLEMENTED);
             };
 
@@ -362,17 +378,16 @@ pub async fn adsb(
                 // gnss_baro_diff: *gnss_baro_diff,
             };
 
-            match gis_velocity_push(data, gis_pool).await {
-                Ok(_) => rest_info!("(adsb) pushed velocity to queue."),
-                Err(_) => {
-                    rest_error!("(adsb) could not push velocity to queue.");
-                    return Err(StatusCode::INTERNAL_SERVER_ERROR);
-                }
-            }
+            gis_velocity_push(data, gis_pool).await.map_err(|_| {
+                rest_error!("could not push velocity to queue.");
+                StatusCode::INTERNAL_SERVER_ERROR
+            })?;
+
+            rest_info!("pushed velocity to queue.");
         }
         _ => {
             // for now, reject non-position messages
-            rest_info!("(adsb) received an unrecognized message.");
+            rest_info!("received an unrecognized message.");
             return Err(StatusCode::BAD_REQUEST);
         }
     };
@@ -380,7 +395,7 @@ pub async fn adsb(
     //
     // Send Telemetry to RabbitMQ
     //
-    let result = mq_channel
+    let _ = mq_channel
         .basic_publish(
             crate::amqp::EXCHANGE_NAME_TELEMETRY,
             crate::amqp::ROUTING_KEY_ADSB,
@@ -388,12 +403,9 @@ pub async fn adsb(
             &payload,
             lapin::BasicProperties::default(),
         )
-        .await;
-
-    match result {
-        Ok(_) => rest_info!("(adsb) telemetry pushed to RabbitMQ."),
-        Err(e) => rest_error!("(adsb) telemetry push to RabbitMQ failed: {e}."),
-    }
+        .await
+        .map_err(|e| rest_error!("telemetry push to RabbitMQ failed: {e}."))
+        .map(|_| rest_info!("telemetry pushed to RabbitMQ."));
 
     //
     // Send to svc-storage
@@ -409,13 +421,81 @@ pub async fn adsb(
     let request = data;
     let client = &grpc_clients.storage.adsb;
 
-    match client.insert(request).await {
-        Ok(_) => rest_info!("(adsb) telemetry pushed to svc-storage."),
-        Err(e) => {
-            rest_error!("(adsb) telemetry push to svc-storage failed: {}.", e);
-            return Err(StatusCode::INTERNAL_SERVER_ERROR);
-        }
-    }
+    client.insert(request).await.map_err(|e| {
+        rest_error!("telemetry push to svc-storage failed: {}.", e);
+        StatusCode::INTERNAL_SERVER_ERROR
+    })?;
+
+    rest_info!("telemetry pushed to svc-storage.");
 
     Ok(Json(count))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_get_aircraft_type() {
+        // in type coding (TC)
+        // A = 4
+        // B = 3
+        // C = 2
+        // D = 1
+
+        // TC = 1 (D) and any category is a reserved field
+        assert_eq!(
+            get_aircraft_type(TypeCoding::D, rand::random::<u8>()),
+            AircraftType::Other
+        );
+
+        // TC = 2 (C) and category 1,3 are surface vehicles
+        assert_eq!(get_aircraft_type(TypeCoding::C, 1), AircraftType::Other);
+        assert_eq!(get_aircraft_type(TypeCoding::C, 3), AircraftType::Other);
+
+        // TC = 2 (C) and category 4,5,6,7 are ground obstacles
+        assert_eq!(
+            get_aircraft_type(TypeCoding::C, 4),
+            AircraftType::Groundobstacle
+        );
+        assert_eq!(
+            get_aircraft_type(TypeCoding::C, 5),
+            AircraftType::Groundobstacle
+        );
+        assert_eq!(
+            get_aircraft_type(TypeCoding::C, 6),
+            AircraftType::Groundobstacle
+        );
+        assert_eq!(
+            get_aircraft_type(TypeCoding::C, 7),
+            AircraftType::Groundobstacle
+        );
+
+        // TC = 3 (B) and category 1,4 are gliders
+        assert_eq!(get_aircraft_type(TypeCoding::B, 1), AircraftType::Glider);
+        assert_eq!(get_aircraft_type(TypeCoding::B, 4), AircraftType::Glider);
+
+        // TC = 3 (B) and category 2 is a lighter than air aircraft
+        assert_eq!(get_aircraft_type(TypeCoding::B, 2), AircraftType::Airship);
+
+        // TC = 3 (B) and category 3 is a parachute/unpowered
+        assert_eq!(get_aircraft_type(TypeCoding::B, 3), AircraftType::Unpowered);
+
+        // TC = 3 (B) and category 5 is a reserved field
+        assert_eq!(get_aircraft_type(TypeCoding::B, 5), AircraftType::Other);
+
+        // TC = 3 (B) and category 6 is a UAV
+        // assert_eq!(get_aircraft_type(TypeCoding::B, 6), AircraftType::Other);
+
+        // TC = 3 (B) and category 7 is a rocket
+        assert_eq!(get_aircraft_type(TypeCoding::B, 7), AircraftType::Rocket);
+
+        // TC = 4 (A) and category 7 is a rotorcraft
+        assert_eq!(
+            get_aircraft_type(TypeCoding::A, 7),
+            AircraftType::Rotorcraft
+        );
+
+        // everything else is 'other' for now
+    }
 }

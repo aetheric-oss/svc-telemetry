@@ -1,4 +1,4 @@
-![Aetheric Banner](https://github.com/aetheric-oss/.github/blob/main/assets/readme-banner.png)
+![Aetheric Banner](https://github.com/aetheric-oss/.github/raw/main/assets/readme-banner.png)
 
 # `svc-telemetry`
 
@@ -8,4 +8,4 @@
 
 ## Overview
 
-This module is responsible for aggregating ADS-B messages from numerous external senders and rebroadcasting a stream (without duplicates) to authenticated listeners, including some within the Arrow network.
+This module is responsible for aggregating ADS-B messages from numerous external senders and rebroadcasting a stream (without duplicates) to authenticated listeners, including some within the Aetheric network.
