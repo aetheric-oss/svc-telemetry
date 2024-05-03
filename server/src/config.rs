@@ -124,8 +124,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_config_from_default() {
-        crate::get_log_handle().await;
-        ut_info!("(test_config_from_default) Start.");
+        lib_common::logger::get_log_handle().await;
+        ut_info!("Start.");
 
         let config = Config::default();
 
@@ -150,13 +150,13 @@ mod tests {
             config.rest_cors_allowed_origin,
             String::from("http://localhost:3000")
         );
-        ut_info!("(test_config_from_default) Success.");
+        ut_info!("Success.");
     }
 
     #[tokio::test]
     async fn test_config_from_env() {
-        crate::get_log_handle().await;
-        ut_info!("(test_config_from_env) Start.");
+        lib_common::logger::get_log_handle().await;
+        ut_info!("Start.");
 
         std::env::set_var("DOCKER_PORT_GRPC", "6789");
         std::env::set_var("DOCKER_PORT_REST", "9876");
@@ -212,6 +212,6 @@ mod tests {
         );
         assert!(config.redis.pool.is_some());
 
-        ut_info!("(test_config_from_env) Success.");
+        ut_info!("Success.");
     }
 }

@@ -41,20 +41,17 @@ use tower_http::trace::TraceLayer;
 ///     Ok(())
 /// }
 /// ```
-#[cfg(not(tarpaulin_include))]
-// no_coverage: Needs running backends to work.
-// Will be tested in integration tests.
 pub async fn rest_server(
     config: Config,
     grpc_clients: GrpcClients,
     shutdown_rx: Option<tokio::sync::oneshot::Receiver<()>>,
 ) -> Result<(), ()> {
-    rest_info!("(rest_server) entry.");
+    rest_info!("entry.");
     let rest_port = config.docker_port_rest;
     let full_rest_addr: SocketAddr = match format!("[::]:{}", rest_port).parse() {
         Ok(addr) => addr,
         Err(e) => {
-            rest_error!("(rest_server) invalid address: {:?}, exiting.", e);
+            rest_error!("invalid address: {:?}, exiting.", e);
             return Err(());
         }
     };
@@ -62,10 +59,7 @@ pub async fn rest_server(
     let cors_allowed_origin = match config.rest_cors_allowed_origin.parse::<HeaderValue>() {
         Ok(url) => url,
         Err(e) => {
-            rest_error!(
-                "(rest_server) invalid cors_allowed_origin address: {:?}, exiting.",
-                e
-            );
+            rest_error!("invalid cors_allowed_origin address: {:?}, exiting.", e);
             return Err(());
         }
     };
@@ -76,7 +70,7 @@ pub async fn rest_server(
     let limit_middleware = ServiceBuilder::new()
         .layer(TraceLayer::new_for_http())
         .layer(HandleErrorLayer::new(|e: BoxError| async move {
-            rest_warn!("(rest_server) too many requests: {}", e);
+            rest_warn!("too many requests: {}", e);
             (
                 StatusCode::TOO_MANY_REQUESTS,
                 "(rest_server) too many requests.".to_string(),
@@ -103,7 +97,7 @@ pub async fn rest_server(
 
     // RabbitMQ Channel
     let mq_channel = init_mq(config.clone()).await.map_err(|e| {
-        rest_error!("(rest_server) could not create RabbitMQ Channel: {e}");
+        rest_error!("could not create RabbitMQ Channel: {e}");
     })?;
 
     // TODO(R5): Replace with PKI certificates
@@ -116,11 +110,11 @@ pub async fn rest_server(
             .collect(),
     ) {
         Err(e) => {
-            rest_error!("(rest_server) could not set JWT_SECRET: {}", e);
+            rest_error!("could not set JWT_SECRET: {}", e);
             return Err(());
         }
         _ => {
-            rest_info!("(rest_server) set JWT_SECRET.");
+            rest_info!("set JWT_SECRET.");
         }
     }
 
@@ -153,12 +147,39 @@ pub async fn rest_server(
         .await
     {
         Ok(_) => {
-            rest_info!("(rest_server) hosted at: {}.", full_rest_addr);
+            rest_info!("hosted at: {}.", full_rest_addr);
             Ok(())
         }
         Err(e) => {
-            rest_error!("(rest_server) could not start server: {}", e);
+            rest_error!("could not start server: {}", e);
             Err(())
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn test_server_start_and_shutdown() {
+        use tokio::time::{sleep, Duration};
+        lib_common::logger::get_log_handle().await;
+        ut_info!("start");
+
+        let config = Config::default();
+
+        let (shutdown_tx, shutdown_rx) = tokio::sync::oneshot::channel::<()>();
+
+        // Start the rest server
+        tokio::spawn(rest_server(config, Some(shutdown_rx)));
+
+        // Give the server time to get through the startup sequence (and thus code)
+        sleep(Duration::from_secs(1)).await;
+
+        // Shut down server
+        assert!(shutdown_tx.send(()).is_ok());
+
+        ut_info!("success");
     }
 }

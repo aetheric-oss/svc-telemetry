@@ -20,8 +20,8 @@ use axum::{
     response::Response,
     Json,
 };
-use chrono::{Duration, Utc};
 use hyper::Request;
+use lib_common::time::{Duration, Utc};
 use once_cell::sync::OnceCell;
 use serde::{Deserialize, Serialize};
 
@@ -65,50 +65,51 @@ impl Claim {
     pub fn create(sub: String) -> Result<String, StatusCode> {
         let header = Header::new(JWT_ENCRYPTION_TYPE);
         let iat = Utc::now().timestamp();
-        let Ok(iat) = <usize>::try_from(iat) else {
-            rest_error!("(Claim::create) could not convert IAT timestamp {iat} to usize.");
-            return Err(StatusCode::INTERNAL_SERVER_ERROR);
-        };
+        let iat = <usize>::try_from(iat).map_err(|e| {
+            rest_error!("could not convert IAT timestamp {iat} to usize: {e}");
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
 
-        let Some(delta) = Duration::try_seconds(JWT_EXPIRE_SECONDS) else {
+        let delta = Duration::try_seconds(JWT_EXPIRE_SECONDS).ok_or_else(|| {
             rest_error!(
                 "(Claim::create) could not create duration from {JWT_EXPIRE_SECONDS} seconds."
             );
-            return Err(StatusCode::INTERNAL_SERVER_ERROR);
-        };
+
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
 
         let exp = (Utc::now() + delta).timestamp();
-        let Ok(exp) = <usize>::try_from(exp) else {
-            rest_error!("(Claim::create) could not convert EXP timestamp {exp} to usize.");
-            return Err(StatusCode::INTERNAL_SERVER_ERROR);
-        };
+        let exp = <usize>::try_from(exp).map_err(|e| {
+            rest_error!("could not convert EXP timestamp {exp} to usize: {e}");
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
 
         let claims = Claim { sub, iat, exp };
 
-        let Some(jwt_secret) = JWT_SECRET.get() else {
-            rest_error!("(Claim::create) JWT_SECRET not set.");
-            return Err(StatusCode::INTERNAL_SERVER_ERROR);
-        };
+        let jwt_secret = JWT_SECRET.get().ok_or_else(|| {
+            rest_error!("JWT_SECRET not set.");
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
 
         let key = EncodingKey::from_secret(jwt_secret.as_bytes());
         encode(&header, &claims, &key).map_err(|e| {
-            rest_error!("(Claim::create) could not encode JWT: {e}");
+            rest_error!("could not encode JWT: {e}");
             StatusCode::INTERNAL_SERVER_ERROR
         })
     }
 
     /// Decode a JWT token
     pub fn decode(token: String) -> Result<Claim, StatusCode> {
-        let Some(jwt_secret) = JWT_SECRET.get() else {
-            rest_error!("(Claim::create) JWT_SECRET not set.");
-            return Err(StatusCode::INTERNAL_SERVER_ERROR);
-        };
+        let jwt_secret = JWT_SECRET.get().ok_or_else(|| {
+            rest_error!("JWT_SECRET not set.");
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
 
         let key = DecodingKey::from_secret(jwt_secret.as_bytes());
         decode(&token, &key, &Validation::default())
             .map(|data| data.claims)
             .map_err(|e| {
-                rest_error!("(Claim::decode) could not decode JWT: {e}");
+                rest_error!("could not decode JWT: {e}");
                 StatusCode::UNAUTHORIZED
             })
     }
@@ -122,16 +123,16 @@ pub fn get_token_from_cookie_jar<B>(
 where
     B: std::fmt::Debug,
 {
-    rest_info!("(get_token_from_cookie_jar) getting token from cookie jar.");
+    rest_info!("getting token from cookie jar.");
     if let Some(cookie) = cookie_jar.get("token") {
         return Ok(cookie.value().to_string());
     }
 
-    // rest_debug!("(get_token_from_cookie_jar) request: {:?}", req);
-    // rest_debug!("(get_token_from_cookie_jar) request headers: {:?}", req.headers());
+    // rest_debug!("request: {:?}", req);
+    // rest_debug!("request headers: {:?}", req.headers());
     let Some(header) = req.headers().get(header::AUTHORIZATION) else {
         let message = "could not get authorization header.".to_string();
-        rest_warn!("(get_token_from_cookie_jar) {message}");
+        rest_warn!("{message}");
         let json_error = ErrorResponse {
             status: "fail".to_string(),
             message,
@@ -142,7 +143,7 @@ where
 
     let Some(auth_value) = header.to_str().ok() else {
         let message = "could not parse authorization header.".to_string();
-        rest_warn!("(get_token_from_cookie_jar) {message}");
+        rest_warn!("{message}");
         let json_error = ErrorResponse {
             status: "fail".to_string(),
             message,
@@ -152,12 +153,12 @@ where
     };
 
     if let Some(substring) = auth_value.strip_prefix("Bearer ") {
-        // rest_debug!("(get_token_from_cookie_jar) request token: {substring}");
+        // rest_debug!("request token: {substring}");
         return Ok(substring.to_owned());
     }
 
     let message = "You are not logged in, please provide token.".to_string();
-    rest_warn!("(get_token_from_cookie_jar) {message}");
+    rest_warn!("{message}");
     let json_error = ErrorResponse {
         status: "fail".to_string(),
         message,
@@ -175,12 +176,12 @@ pub async fn auth<B>(
 where
     B: std::fmt::Debug,
 {
-    rest_info!("(auth) authenticating request.");
+    rest_info!("authenticating request.");
     let token = get_token_from_cookie_jar(&req, &cookie_jar)?;
 
-    // rest_debug!("(auth) request token: {token}");
+    // rest_debug!("request token: {token}");
     let claim = Claim::decode(token).map_err(|e| {
-        rest_warn!("(auth) could not decode token: {e}");
+        rest_warn!("could not decode token: {e}");
         let json_error = ErrorResponse {
             status: "fail".to_string(),
             message: "Invalid token".to_string(),
@@ -188,7 +189,7 @@ where
         (StatusCode::UNAUTHORIZED, Json(json_error))
     })?;
 
-    rest_debug!("(auth) request claim: {:?}", claim);
+    rest_debug!("request claim: {:?}", claim);
 
     req.extensions_mut().insert(claim);
     Ok(next.run(req).await)
@@ -210,7 +211,7 @@ where
 pub async fn login(identifier: Bytes) -> Result<Json<String>, StatusCode> {
     let identifier = String::from_utf8(identifier.to_vec()).map_err(|_| StatusCode::BAD_REQUEST)?;
     if identifier.is_empty() {
-        rest_warn!("(login) empty identifier, failing login request.");
+        rest_warn!("empty identifier, failing login request.");
         return Err(StatusCode::BAD_REQUEST);
     }
 
@@ -228,7 +229,7 @@ mod tests {
     #[tokio::test]
     async fn middleware_runs() {
         async fn handler(Extension(claim): Extension<Claim>) {
-            crate::get_log_handle().await;
+            lib_common::logger::get_log_handle().await;
             ut_info!("(middleware_runs): {:#?}", claim);
             serde_json::to_string(&claim).unwrap();
         }

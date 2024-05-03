@@ -1,18 +1,46 @@
-//! Functions for parsing ADS-B packets
-
+/// Functions for parsing ADS-B packets
 use adsb_deku::Sign;
+use std::fmt::{self, Display, Formatter};
 
 /// Expected size of ADSB packets
 pub const ADSB_SIZE_BYTES: usize = 14;
 
 /// Possible errors decoding ADSB packets
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, PartialEq)]
 pub enum DecodeError {
     /// The latitudes of a packet pair are in different zones
     CrossedLatitudeZones,
 
-    /// Invalid Aircraft Subtype (subtype is not 1 or 2)
+    /// Unsupported Subtype
+    UnsupportedSubtype,
+
+    /// Invalid Aircraft Subtype (subtype is not 1, 2, 3, 4)
     InvalidSubtype,
+}
+
+/// Possible errors encoding ADSB packets
+#[derive(Debug, Copy, Clone, PartialEq)]
+pub enum EncodeError {
+    /// Invalid CPR flag
+    InvalidFlag,
+}
+
+impl Display for DecodeError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        match self {
+            DecodeError::CrossedLatitudeZones => write!(f, "Crossed latitude zones"),
+            DecodeError::UnsupportedSubtype => write!(f, "Unsupported subtype"),
+            DecodeError::InvalidSubtype => write!(f, "Invalid subtype"),
+        }
+    }
+}
+
+impl Display for EncodeError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        match self {
+            EncodeError::InvalidFlag => write!(f, "Invalid CPR flag"),
+        }
+    }
 }
 
 /// Convert the ICAO field to a u32
@@ -42,6 +70,16 @@ pub fn decode_altitude(altitude: u16) -> f32 {
     0.3048 * alt_ft as f32
 }
 
+/// Encode the altitude in the ADS-B packet
+pub fn encode_altitude(altitude_m: f32) -> u16 {
+    let altitude: u16 = (altitude_m / 0.3048) as u16;
+    let altitude = (altitude + 1000) / 25;
+    let qbit = 1; // increments of 25 feet
+
+    // shift top 8 bits over by 1, add in the Q-bit, then OR with the bottom 4
+    ((altitude & 0xFFF0) << 1) | (qbit << 4) | (altitude & 0xF)
+}
+
 ///
 /// Returns the remainder after dividing x by y
 fn modulus(x: f64, y: f64) -> f64 {
@@ -65,18 +103,11 @@ fn nl(lat: f64) -> f64 {
     let a = 1. - (PI / NZ).cos();
     let b = (1. + (2. * (PI * lat / 180.)).cos()) / 2.;
     let x = a / b;
-    let mut denominator = 1. - x;
+    let denominator = (1. - x)
+        // acos is undefined for values outside of [-1, 1]
+        .clamp(-1., 1.)
+        .acos();
 
-    // acos is undefined for values outside of [-1, 1]
-    if denominator < -1. {
-        denominator = -1.;
-    } else if denominator > 1. {
-        denominator = 1.;
-    }
-
-    denominator = denominator.acos();
-
-    //
     // Result
     let result = numerator / denominator;
     // println!("(nl) result: {} (num: {}, denom: {})", result, numerator, denominator);
@@ -135,6 +166,27 @@ pub fn decode_cpr(
     Ok((latitude, longitude))
 }
 
+/// Encodes latitude and longitude in CPR format
+/// <https://mode-s.org/decode/content/ads-b/3-airborne-position.html#cpr-zones>
+pub fn encode_cpr(cpr_flag: u8, longitude: f64, latitude: f64) -> Result<(u32, u32), EncodeError> {
+    static SCALAR: f64 = 2u32.pow(17) as f64;
+    let i = match cpr_flag {
+        0 => 0., // even
+        1 => 1., // odd
+        _ => return Err(EncodeError::InvalidFlag),
+    };
+
+    let dlat = 360. / (60. - i);
+    let yz = (SCALAR * modulus(latitude, dlat) / dlat + 0.5).floor();
+    let cpr_latitude = modulus(yz, SCALAR);
+    let rlat = dlat * ((latitude / dlat).floor() + cpr_latitude / SCALAR);
+    let dlon = 360. / 1.0_f64.max(nl(rlat) - i);
+    let xz = (SCALAR * modulus(longitude, dlon) / dlon + 0.5).floor();
+    let cpr_longitude = modulus(xz, SCALAR);
+
+    Ok((cpr_longitude as u32, cpr_latitude as u32))
+}
+
 /// Decodes the speed and direction of an aircraft
 /// <https://airmetar.main.jp/radio/ADS-B%20Decoding%20Guide.pdf>
 pub fn decode_speed_direction(
@@ -178,6 +230,7 @@ pub fn decode_speed_direction(
 
             (vx, vy)
         }
+        3 | 4 => return Err(DecodeError::UnsupportedSubtype),
         _ => return Err(DecodeError::InvalidSubtype),
     };
 
@@ -213,17 +266,17 @@ mod tests {
 
     #[test]
     /// See 3.2.4 NL(lat) of https://airmetar.main.jp/radio/ADS-B%20Decoding%20Guide.pdf
-    fn ut_number_of_longitude_zones() {
+    fn test_number_of_longitude_zones() {
         assert_eq!(nl(0.), 59.);
         assert_eq!(nl(87.), 2.);
         assert_eq!(nl(-87.), 2.);
-        // assert_eq!(nl(87.1), 1.); TODO(R4) incorrect around the poles
-        // assert_eq!(nl(-87.1), 1.); TODO(R4) switch to lookup table
+        // assert_eq!(nl(87.1), 1.); TODO(R5) incorrect around the poles
+        // assert_eq!(nl(-87.1), 1.); TODO(R5) switch to lookup table
     }
 
     #[test]
     /// See 3.3 Latitude/Longitude calculation of https://airmetar.main.jp/radio/ADS-B%20Decoding%20Guide.pdf
-    fn ut_decode_cpr() {
+    fn test_decode_cpr() {
         //
         // Newest packet - even
         let lat_even = 0b10110101101001000;
@@ -235,13 +288,13 @@ mod tests {
         let lon_odd = 0b01100010000010010;
         let (latitude, longitude) = decode_cpr(lat_even, lon_even, lat_odd, lon_odd).unwrap();
 
-        println!("(ut_decode_cpr) lat: {}, lon: {}", latitude, longitude);
+        println!("(test_decode_cpr) lat: {}, lon: {}", latitude, longitude);
         assert!((latitude - 52.25720214843750).abs() < 0.0000001);
         assert!((longitude - 3.91937).abs() < 0.0001);
     }
 
     #[test]
-    fn ut_decode_altitude() {
+    fn test_decode_altitude() {
         let alt = 0b110000111000;
         let expected_ft: f32 = 38000.;
         let expected_meters = expected_ft * 0.3048;
@@ -251,33 +304,148 @@ mod tests {
     }
 
     #[test]
-    fn ut_decode_vertical_speed() {
+    fn test_decode_vertical_speed() {
         let speed = decode_vertical_speed(Sign::Negative, 14).unwrap();
         let expected_speed = -832.0 * 0.3048; // ftps -> m/s
-
-        println!("(ut_decode_vertical_speed) speed: {speed}",);
         assert!((speed - expected_speed).abs() < 0.01);
 
         let speed = decode_vertical_speed(Sign::Negative, 37).unwrap();
         let expected_speed = -2304.0 * 0.3048; // ftps -> m/s
+        assert!((speed - expected_speed).abs() < 0.01);
 
-        println!("(ut_decode_vertical_speed) speed: {speed}",);
+        let speed = decode_vertical_speed(Sign::Positive, 37).unwrap();
+        let expected_speed = expected_speed * -1.;
         assert!((speed - expected_speed).abs() < 0.01);
     }
 
     #[test]
-    fn ut_decode_speed_direction() {
+    fn test_decode_speed_direction() {
+        // subtype 1 (subsonic)
         let (speed, direction) =
             decode_speed_direction(1, Sign::Negative, 9, Sign::Negative, 160).unwrap();
 
         let expected_speed = 159.20 * 0.514444; // knots -> m/s
-        let expected_angle = 182.88;
-
-        println!(
-            "(ut_decode_speed_direction) speed: {}, direction: {}",
-            speed, direction
-        );
+        let mut expected_angle = 182.88;
         assert!((speed - expected_speed).abs() < 0.01);
         assert!((direction - expected_angle).abs() < 0.01);
+
+        // changing north to south and east to west shouldn't change the speed
+        // angle should be opposite of the original
+        let (speed, direction) =
+            decode_speed_direction(1, Sign::Positive, 9, Sign::Positive, 160).unwrap();
+        expected_angle -= 180.;
+        assert!((speed - expected_speed).abs() < 0.01);
+        assert!((direction - expected_angle).abs() < 0.01);
+
+        // subtype 2 (supersonic)
+        // change north to south
+        // flip angle over the one axis
+        let (supersonic_speed, direction) =
+            decode_speed_direction(2, Sign::Positive, 9, Sign::Negative, 160).unwrap();
+        assert!(supersonic_speed - (speed * 4.0) < 0.01);
+        expected_angle = 180. - expected_angle; // flips angle North to South
+        assert!((direction - expected_angle).abs() < 0.01);
+
+        let (supersonic_speed, direction) =
+            decode_speed_direction(2, Sign::Negative, 9, Sign::Positive, 160).unwrap();
+        expected_angle += 180.;
+        assert!(supersonic_speed - (speed * 4.0) < 0.01);
+        assert!((direction - expected_angle).abs() < 0.01);
+
+        // unsupported subtype
+        // airspeed only (no groundspeed)
+        // subsonic
+        let error = decode_speed_direction(3, Sign::Negative, 9, Sign::Negative, 160).unwrap_err();
+        assert_eq!(error, DecodeError::UnsupportedSubtype);
+        // supersonic
+        let error = decode_speed_direction(4, Sign::Negative, 9, Sign::Negative, 160).unwrap_err();
+        assert_eq!(error, DecodeError::UnsupportedSubtype);
+
+        // Invalid subtype
+        let error = decode_speed_direction(5, Sign::Negative, 9, Sign::Negative, 160).unwrap_err();
+        assert_eq!(error, DecodeError::InvalidSubtype);
+    }
+
+    #[test]
+    fn test_get_adsb_icao_address() {
+        let icao = [0x01, 0x02, 0x03];
+        let icao_address = get_adsb_icao_address(&icao);
+        assert_eq!(icao_address, 0x00010203);
+    }
+
+    #[test]
+    fn test_get_adsb_message_type() {
+        let bytes = [0; ADSB_SIZE_BYTES];
+        let message_type = get_adsb_message_type(&bytes);
+        assert_eq!(message_type, 0);
+
+        let mut bytes = [0; ADSB_SIZE_BYTES];
+        let expected_message_type = 0b10101;
+        bytes[4] = expected_message_type << 3;
+
+        let message_type = get_adsb_message_type(&bytes);
+        assert_eq!(message_type, expected_message_type as i64);
+    }
+
+    #[test]
+    fn test_decode_error_display() {
+        assert_eq!(
+            DecodeError::CrossedLatitudeZones.to_string(),
+            "Crossed latitude zones"
+        );
+        assert_eq!(DecodeError::InvalidSubtype.to_string(), "Invalid subtype");
+    }
+
+    #[test]
+    fn test_encode_altitude() {
+        let altitude_ft: f32 = 38_000.0;
+        let altitude_m: f32 = altitude_ft * 0.3048;
+        let expected_encoded = 0b110000111000;
+        let encoded = encode_altitude(altitude_m);
+        assert_eq!(encoded, expected_encoded);
+    }
+
+    #[test]
+    fn test_encode_cpr() {
+        // Use example from 1090MHz
+        // <https://mode-s.org/decode/content/ads-b/3-airborne-position.html#decoding-example>
+        let cpr_flag = 0;
+        let longitude = 3.91937255859375;
+        let latitude = 52.2572021484375;
+
+        let scalar: f64 = 2u32.pow(17) as f64;
+        let i = match cpr_flag {
+            0 => 0., // even
+            1 => 1., // odd
+            _ => panic!(),
+        };
+
+        let dlat = 360. / (60. - i);
+        let yz = (scalar * modulus(latitude, dlat) / dlat + 0.5).floor();
+        let cpr_latitude = modulus(yz, scalar);
+        let rlat = dlat * ((latitude / dlat).floor() + cpr_latitude / scalar);
+        let dlon = 360. / 1.0_f64.max(nl(rlat) - i);
+
+        let (cpr_longitude, cpr_latitude) = encode_cpr(cpr_flag, longitude, latitude).unwrap();
+        let expected_longitude_cpr = 0b01100100010101100;
+        let expected_latitude_cpr = 0b10110101101001000;
+        let tolerance_latitude = dlat / (2_i32.pow(18) as f64);
+        let tolerance_longitude = dlon / (2_i32.pow(18) as f64);
+
+        println!(
+            "(test_encode_cpr) lat: {}, lon: {}",
+            cpr_latitude, cpr_longitude
+        );
+        println!(
+            "(test_encode_cpr) expected lat: {}, expected lon: {}",
+            expected_latitude_cpr, expected_longitude_cpr
+        );
+        println!(
+            "(test_encode_cpr) tolerance lat: {}, tolerance lon: {}",
+            tolerance_latitude, tolerance_longitude
+        );
+
+        assert!((expected_latitude_cpr as f64 - cpr_latitude as f64).abs() < tolerance_latitude);
+        assert!((expected_longitude_cpr as f64 - cpr_longitude as f64).abs() < tolerance_longitude);
     }
 }
