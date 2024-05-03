@@ -1,4 +1,4 @@
-![Arrow Banner](https://github.com/aetheric-oss/.github/blob/main/assets/doc-banner.png)
+![Aetheric Banner](https://github.com/aetheric-oss/.github/raw/main/assets/doc-banner.png)
 
 # Concept of Operations - `svc-telemetry`
 
@@ -15,16 +15,16 @@ up-to-date aircraft status (such as `svc-scheduler` and `svc-guidance`).
 | Attribute     | Description                                                       |
 | ------------- |-------------------------------------------------------------------|
 | Maintainer(s) | [Aetheric Realm Team](https://github.com/orgs/aetheric-oss/teams/dev-realm) |
-| Stuckee       | A.M. Smith ([@ServiceDog](https://github.com/servicedog))         |
+| Stuckee       | A.M. Smith ([@amsmith-pro](https://github.com/amsmith-pro))         |
 | Status        | Development                                                       |
 
 ## :books: Related Documents
 
 Document | Description
 --- | ---
-[High-Level Concept of Operations (CONOPS)](https://github.com/aetheric-oss/se-services/blob/develop/docs/conops.md) | Overview of Arrow microservices.
-[High-Level Interface Control Document (ICD)](https://github.com/aetheric-oss/se-services/blob/develop/docs/icd.md) | Interfaces and frameworks common to all Arrow microservices.
-[Requirements - `svc-telemetry`](https://nocodb.arrowair.com/dashboard/#/nc/view/6ffa7547-b2ab-4d02-b5cb-ed2d3c60e2c7) | Requirements and user stories for this microservice.
+[High-Level Concept of Operations (CONOPS)](https://github.com/aetheric-oss/se-services/blob/develop/docs/conops.md) | Overview of Aetheric microservices.
+[High-Level Interface Control Document (ICD)](https://github.com/aetheric-oss/se-services/blob/develop/docs/icd.md) | Interfaces and frameworks common to all Aetheric microservices.
+[Requirements - `svc-telemetry`](https://nocodb.aetheric.nl/dashboard/#/nc/view/6ffa7547-b2ab-4d02-b5cb-ed2d3c60e2c7) | Requirements and user stories for this microservice.
 [Interface Control Document (ICD) - `svc-telemetry`](./icd.md) | Defines the inputs and outputs of this microservice.
 [Software Design Document (SDD) - `svc-telemetry`](./sdd.md) | Specifies the internal activity of this microservice.
 
@@ -63,13 +63,13 @@ The types of telemetry supported are:
     - ADS-B 1090 MHz broadcasts are required for all aircraft in USA and Europe.
     - [ADS-B Formation](https://www.mathworks.com/help/supportpkg/rtlsdrradio/ug/airplane-tracking-using-ads-b-signals.html)
     - `svc-telemetry` also accepts the UUID of the sender that captured the ADS-B message.
-- [CCSDS](https://public.ccsds.org/Pubs/133x0b2e1.pdf)
-    - Typically used in space applications.
-    - Data segment containing [Arrow-defined telemetry formats](https://nocodb.arrowair.com/dashboard/#/nc/view/426aa4a3-1f74-43b0-b765-0b448be51242) for eVTOL.
+- [Remote ID](https://www.faa.gov/uas/getting_started/remote_id)
+    - Digital license plate for drones
+    - Encoded packets sent either as bluetooth/wifi advertisement packets ("broadcast RID") or over cellular ("network RID")
 
 ## Technical Impacts
 
-Asset managers have the choice to stream ADS-B directly to the `svc-telemetry` microservice, allowing the Arrow network to respond faster to real-time events than data that goes through a third-party ADS-B provider.
+Asset managers have the choice to stream ADS-B directly to the `svc-telemetry` microservice, allowing the Aetheric network to respond faster to real-time events than data that goes through a third-party ADS-B provider.
 
 Real-time telemetry data may be considered by `svc-scheduler` when calculating the estimated trip length. In a learning system, sufficient telemetry data may come to dissuade routes with excessive turbulence or headwinds.
 

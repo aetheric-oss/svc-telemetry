@@ -19,7 +19,7 @@ use svc_storage_client_grpc::prelude::*;
 pub async fn health_check(
     Extension(grpc_clients): Extension<GrpcClients>,
 ) -> Result<(), StatusCode> {
-    rest_debug!("(health_check) entry.");
+    rest_debug!("entry.");
 
     let mut ok = true;
 
@@ -31,7 +31,7 @@ pub async fn health_check(
         .is_err()
     {
         let error_msg = "svc-storage adsb unavailable.".to_string();
-        rest_error!("(health_check) {}.", &error_msg);
+        rest_error!("{}.", &error_msg);
         ok = false;
     }
 
@@ -42,17 +42,17 @@ pub async fn health_check(
         .is_err()
     {
         let error_msg = "svc-gis unavailable".to_string();
-        rest_error!("(health_check) {}.", &error_msg);
+        rest_error!("{}.", &error_msg);
         ok = false;
     }
 
     match ok {
         true => {
-            rest_debug!("(health_check) healthy, all dependencies running.");
+            rest_debug!("healthy, all dependencies running.");
             Ok(())
         }
         false => {
-            rest_error!("(health_check) unhealthy, 1+ dependencies down.");
+            rest_error!("unhealthy, 1+ dependencies down.");
             Err(StatusCode::SERVICE_UNAVAILABLE)
         }
     }

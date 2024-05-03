@@ -1,7 +1,8 @@
 /// Network Remote ID
-use chrono::{DateTime, Duration, Timelike, Utc};
+use lib_common::time::{DateTime, Duration, Timelike, Utc};
 use packed_struct::prelude::packed_bits::Bits;
 use packed_struct::prelude::*;
+use std::fmt::{self, Display, Formatter};
 
 ///////////////////////////////////////////////
 // Field Enumerations
@@ -560,6 +561,19 @@ pub enum LocationDecodeError {
     UnknownTimestamp,
 }
 
+impl Display for LocationDecodeError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        match self {
+            LocationDecodeError::SpeedGte254_25 => {
+                write!(f, "Speed is greater than or equal to 254.25 m/s")
+            }
+            LocationDecodeError::UnknownSpeed => write!(f, "Unknown speed"),
+            LocationDecodeError::UnknownAltitude => write!(f, "Unknown altitude"),
+            LocationDecodeError::UnknownTimestamp => write!(f, "Unknown timestamp"),
+        }
+    }
+}
+
 /// Errors decoding a location message
 #[derive(PartialEq, Copy, Clone, Debug)]
 pub enum LocationEncodeError {
@@ -635,7 +649,7 @@ impl LocationMessage {
 
     /// Encode the speed in meters per second
     pub fn encode_speed(speed: f32) -> Result<(SpeedMultiplier, u8), LocationEncodeError> {
-        static THRESHOLD: f32 = 255.0 / 4.0; // 255 * 0.25
+        static THRESHOLD: f32 = 63.75; // 255 * 0.25
 
         // TODO(R5): What if facing a direction but moving backwards due to wind?
         // Casting to a u8 here would eliminate sign data
@@ -698,25 +712,20 @@ impl LocationMessage {
     pub fn decode_timestamp(&self) -> Result<DateTime<Utc>, LocationDecodeError> {
         // The timestamp is encoded as the number of
         let now = Utc::now();
-        let Some(current_hour) = now
+        let current_hour = now
             .with_minute(0)
             .and_then(|x| x.with_second(0))
             .and_then(|x| x.with_nanosecond(0))
-        else {
-            return Err(LocationDecodeError::UnknownTimestamp);
-        };
+            .ok_or(LocationDecodeError::UnknownTimestamp)?;
 
         let ms_since_hour = (now - current_hour).num_milliseconds();
         let tenths_since_hour = (ms_since_hour / 100) as u16; // 36000 is max value, so safe to cast
+        let encoded_duration_ms = Duration::try_milliseconds(self.timestamp as i64 * 100)
+            .ok_or(LocationDecodeError::UnknownTimestamp)?;
 
-        let Some(encoded_duration_ms) = Duration::try_milliseconds(self.timestamp as i64 * 100)
-        else {
-            return Err(LocationDecodeError::UnknownTimestamp);
-        };
-
-        let Some(delta) = Duration::try_hours(1) else {
-            return Err(LocationDecodeError::UnknownTimestamp);
-        };
+        #[cfg(not(tarpaulin_include))]
+        // no_coverage: (Rnever) won't fail
+        let delta = Duration::try_hours(1).ok_or(LocationDecodeError::UnknownTimestamp)?;
 
         let timestamp = if self.timestamp > tenths_since_hour {
             // the encoded timestamp refers to tenths of seconds since the previous hour
@@ -731,13 +740,11 @@ impl LocationMessage {
 
     /// Encode the timestamp
     pub fn encode_timestamp(timestamp: DateTime<Utc>) -> Result<u16, LocationEncodeError> {
-        let Some(current_hour) = timestamp
+        let current_hour = timestamp
             .with_minute(0)
             .and_then(|x| x.with_second(0))
             .and_then(|x| x.with_nanosecond(0))
-        else {
-            return Err(LocationEncodeError::UnknownTimestamp);
-        };
+            .ok_or(LocationEncodeError::UnknownTimestamp)?;
 
         let duration_since_hour = timestamp - current_hour;
         Ok((duration_since_hour.num_milliseconds() / 100) as u16) // to get tenths of seconds
@@ -767,6 +774,12 @@ mod tests {
 
         let bytes = frame.pack().unwrap();
         assert_eq!(bytes.len(), 25);
+
+        let msg = BasicMessage::default();
+        assert_eq!(msg.id_type, IdType::None);
+        assert_eq!(msg.ua_type, UaType::Undeclared);
+        assert_eq!(msg.uas_id, [0; 20]);
+        assert_eq!(msg.reserved, [0; 3]);
     }
 
     #[test]
@@ -827,7 +840,7 @@ mod tests {
         let pressure_altitude = LocationMessage::encode_altitude(actual_altitude);
         let timestamp = LocationMessage::encode_timestamp(actual_timestamp).unwrap();
 
-        let msg = LocationMessage {
+        let mut msg = LocationMessage {
             operational_status: OperationalStatus::Airborne,
             reserved_0: 0.into(),
             height_type: HeightType::AboveTakeoff,
@@ -857,9 +870,86 @@ mod tests {
         assert_eq!(msg.decode_latitude(), actual_latitude);
         assert_eq!(msg.decode_longitude(), actual_longitude);
         assert_eq!(msg.decode_altitude(), Ok(actual_altitude));
-        assert!(
-            msg.decode_timestamp().unwrap() - actual_timestamp
-                < Duration::try_milliseconds(10).unwrap()
+
+        let delta = msg.decode_timestamp().unwrap() - actual_timestamp;
+        assert!(delta < Duration::try_milliseconds(10).unwrap());
+
+        // direction
+        assert_eq!(
+            LocationMessage::encode_direction(361).unwrap_err(),
+            LocationEncodeError::InvalidTrackAngle
         );
+        assert_eq!(
+            LocationMessage::encode_direction(179).unwrap(),
+            (EastWestDirection::East, 179)
+        );
+        assert_eq!(
+            LocationMessage::encode_direction(180).unwrap(),
+            (EastWestDirection::West, 0)
+        );
+
+        // altitude
+        msg.pressure_altitude = 0;
+        assert_eq!(
+            msg.decode_altitude().unwrap_err(),
+            LocationDecodeError::UnknownAltitude
+        );
+
+        // speed
+        msg.speed_multiplier = SpeedMultiplier::X0_75;
+        msg.speed = 255;
+        assert_eq!(
+            msg.decode_speed().unwrap_err(),
+            LocationDecodeError::UnknownSpeed
+        );
+        msg.speed = 254;
+        assert_eq!(
+            msg.decode_speed().unwrap_err(),
+            LocationDecodeError::SpeedGte254_25
+        );
+        assert_eq!(
+            LocationMessage::encode_speed(-0.001).unwrap_err(),
+            LocationEncodeError::NegativeGroundSpeed
+        );
+        assert_eq!(
+            LocationMessage::encode_speed(254.25).unwrap(),
+            (SpeedMultiplier::X0_75, 254)
+        );
+        let (multiplier, speed) = LocationMessage::encode_speed(254.24).unwrap();
+        // ut_info!("Speed: {}, Multiplier: {:?}", speed, multiplier);
+        assert_eq!(multiplier, SpeedMultiplier::X0_75);
+        assert!(((speed as f32) - 253.986).abs() < 1.0);
+
+        // vertical speed
+        msg.vertical_speed = 126;
+        assert_eq!(
+            msg.decode_vertical_speed().unwrap_err(),
+            LocationDecodeError::UnknownSpeed
+        );
+        msg.vertical_speed = 125;
+        assert_eq!(msg.decode_vertical_speed().unwrap(), 62.0);
+        msg.vertical_speed = -124;
+        assert_eq!(msg.decode_vertical_speed().unwrap(), -62.0);
+        msg.vertical_speed = -125;
+        assert_eq!(msg.decode_vertical_speed().unwrap(), -62.0);
+        msg.vertical_speed = -123;
+        assert_eq!(msg.decode_vertical_speed().unwrap(), -61.5);
+
+        // timestamp
+        // let now = Utc::now();
+        // let current_hour = now
+        //     .with_minute(0)
+        //     .and_then(|x| x.with_second(0))
+        //     .and_then(|x| x.with_nanosecond(0))
+        //     .ok_or_else(|| LocationDecodeError::UnknownTimestamp)?;
+
+        // let ms_since_hour = (now - current_hour).num_milliseconds();
+        // let tenths_since_hour = (ms_since_hour / 100) as u16; // 36000 is max value, so safe to cast
+        // let encoded_duration_ms = Duration::try_milliseconds(self.timestamp as i64 * 100)
+        //     .ok_or_else(|| LocationDecodeError::UnknownTimestamp)?;
+
+        // let delta = Duration::try_hours(1).ok_or_else(|| LocationDecodeError::UnknownTimestamp)?;
+        // msg.timestamp = tenths_since_hour + 100;
+        // assert_eq!(msg.decode_timestamp().unwrap(), current_hour + Duration::try_hours(1).unwrap());
     }
 }

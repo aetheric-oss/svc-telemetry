@@ -16,13 +16,9 @@ pub struct TelemetryPools {
 
 /// Convert bytes to a key
 pub fn bytes_to_key(bytes: &[u8]) -> String {
-    let mut key = String::new();
-
-    for byte in bytes {
-        key.push_str(&format!("{:02x}", byte));
-    }
-
-    key
+    bytes
+        .iter()
+        .fold("".to_string(), |acc, byte| format!("{acc}{:02x}", byte))
 }
 
 #[cfg(test)]
