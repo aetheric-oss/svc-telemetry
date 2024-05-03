@@ -1,4 +1,4 @@
-![Arrow Banner](https://github.com/Arrow-air/tf-github/raw/main/src/templates/doc-banner-services.png)
+![Arrow Banner](https://github.com/aetheric-oss/.github/blob/main/assets/doc-banner.png)
 
 # Concept of Operations - `svc-telemetry`
 
@@ -14,7 +14,7 @@ up-to-date aircraft status (such as `svc-scheduler` and `svc-guidance`).
 
 | Attribute     | Description                                                       |
 | ------------- |-------------------------------------------------------------------|
-| Maintainer(s) | [Services Team](https://github.com/orgs/Arrow-air/teams/services) |
+| Maintainer(s) | [Aetheric Realm Team](https://github.com/orgs/aetheric-oss/teams/dev-realm) |
 | Stuckee       | A.M. Smith ([@ServiceDog](https://github.com/servicedog))         |
 | Status        | Development                                                       |
 
@@ -22,8 +22,8 @@ up-to-date aircraft status (such as `svc-scheduler` and `svc-guidance`).
 
 Document | Description
 --- | ---
-[High-Level Concept of Operations (CONOPS)](https://github.com/Arrow-air/se-services/blob/develop/docs/conops.md) | Overview of Arrow microservices.
-[High-Level Interface Control Document (ICD)](https://github.com/Arrow-air/se-services/blob/develop/docs/icd.md) | Interfaces and frameworks common to all Arrow microservices.
+[High-Level Concept of Operations (CONOPS)](https://github.com/aetheric-oss/se-services/blob/develop/docs/conops.md) | Overview of Arrow microservices.
+[High-Level Interface Control Document (ICD)](https://github.com/aetheric-oss/se-services/blob/develop/docs/icd.md) | Interfaces and frameworks common to all Arrow microservices.
 [Requirements - `svc-telemetry`](https://nocodb.arrowair.com/dashboard/#/nc/view/6ffa7547-b2ab-4d02-b5cb-ed2d3c60e2c7) | Requirements and user stories for this microservice.
 [Interface Control Document (ICD) - `svc-telemetry`](./icd.md) | Defines the inputs and outputs of this microservice.
 [Software Design Document (SDD) - `svc-telemetry`](./sdd.md) | Specifies the internal activity of this microservice.
