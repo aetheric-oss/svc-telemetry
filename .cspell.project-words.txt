@@ -91,3 +91,4 @@ dozzle
 cockroachdb
 localutm
 Rnever
+oneshot

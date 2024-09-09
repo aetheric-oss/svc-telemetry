@@ -67,6 +67,7 @@ pub enum AMQPError {
 
 /// Initializes the AMQP connection. Creates the telemetry exchange and queues.
 #[cfg(not(tarpaulin_include))]
+#[cfg(not(test))]
 // no_coverage: (Rnever) need rabbitmq backend running, integration tests
 pub async fn init_mq(config: Config) -> Result<lapin::Channel, AMQPError> {
     // Establish connection to RabbitMQ node
@@ -144,4 +145,12 @@ pub async fn init_mq(config: Config) -> Result<lapin::Channel, AMQPError> {
     }
 
     Ok(amqp_channel)
+}
+
+/// Initializes the AMQP connection. Creates the telemetry exchange and queues.
+#[cfg(not(tarpaulin_include))]
+#[cfg(test)]
+// no_coverage: (Rnever) need rabbitmq backend running, integration tests
+pub async fn init_mq(_config: Config) -> Result<(), AMQPError> {
+    Ok(())
 }

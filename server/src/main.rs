@@ -30,10 +30,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         return generate_openapi_spec::<ApiDoc>(&target).map_err(|e| e.into());
     }
 
-    let grpc_clients = grpc::client::GrpcClients::default(config.clone());
-
     // REST Server
-    tokio::spawn(rest_server(config.clone(), grpc_clients, None));
+    tokio::spawn(rest_server(config.clone(), None));
 
     // GRPC Server
     tokio::spawn(grpc_server(config, None)).await?;
