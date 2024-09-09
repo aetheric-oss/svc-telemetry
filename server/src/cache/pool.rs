@@ -2,7 +2,9 @@
 
 use core::fmt::{Debug, Formatter};
 
+#[cfg(not(test))]
 use deadpool_redis::{redis, Pool, Runtime};
+
 use serde::Serialize;
 use snafu::prelude::Snafu;
 
@@ -11,6 +13,7 @@ use snafu::prelude::Snafu;
 /// The [`TelemetryPool`] struct provides a managed pool of connections to a Redis server.
 /// It allows clients to acquire and release connections from the pool and handles
 /// connection management, such as connection pooling and reusing connections.
+#[cfg(not(test))]
 #[derive(Clone)]
 pub struct TelemetryPool {
     /// The underlying pool of Redis connections.
@@ -19,12 +22,26 @@ pub struct TelemetryPool {
     key_folder: String,
 }
 
+/// Represents a pool of connections to a Redis server.
+/// No pool in test environment.
+#[derive(Clone)]
+#[cfg(test)]
+pub struct TelemetryPool {
+    /// The string prepended to the key being stored.
+    key_folder: String,
+}
+
 /// Represents a pool of connections to a Redis server for GIS-related data
 #[derive(Clone)]
+#[cfg(not(test))]
 pub struct GisPool {
     /// The underlying pool of Redis connections.
     pool: Pool,
 }
+
+#[derive(Clone, Copy)]
+#[cfg(test)]
+pub struct GisPool {}
 
 impl Debug for TelemetryPool {
     fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
@@ -56,6 +73,25 @@ pub enum CacheError {
     OperationFailed,
 }
 
+#[cfg(test)]
+impl GisPool {
+    /// Create a new GisPool
+    pub async fn new(_config: crate::config::Config) -> Result<Self, ()> {
+        println!("(MOCK) creating pool...");
+        Ok(GisPool {})
+    }
+
+    /// Push items onto a redis queue
+    pub async fn push<T>(&mut self, _item: T, _queue_key: &str) -> Result<(), ()>
+    where
+        T: Serialize + Debug,
+    {
+        println!("(MOCK) pushing...");
+        Ok(())
+    }
+}
+
+#[cfg(not(test))]
 #[cfg(not(tarpaulin_include))]
 // no_coverage: (R5) need redis backend to test
 impl GisPool {
@@ -119,6 +155,7 @@ impl GisPool {
 }
 
 #[cfg(not(tarpaulin_include))]
+#[cfg(not(test))]
 // no_coverage: (R5) need redis backend to test
 impl TelemetryPool {
     /// Create a new TelemetryPool
@@ -305,5 +342,52 @@ impl TelemetryPool {
         }
 
         Ok(values)
+    }
+}
+
+#[cfg(not(tarpaulin_include))]
+#[cfg(test)]
+// no_coverage: (R5) need redis backend to test
+impl TelemetryPool {
+    /// Create a new TelemetryPool
+    /// The 'key_folder' argument is prepended to the key being stored. The
+    ///  complete key will take the format \<folder\>:\<subset\>:\<subset\>:\<key\>.
+    ///  This is used to differentiate keys inserted into Redis by different
+    ///  microservices. For example, an ADS-B key in svc-telemetry might be
+    ///  formatted `telemetry:adsb:1234567890`.
+    pub async fn new(_config: crate::config::Config, key_folder: &str) -> Result<Self, ()> {
+        cache_info!("pool created.");
+        Ok(TelemetryPool {
+            key_folder: String::from(key_folder),
+        })
+    }
+
+    /// If the key didn't exist, inserts the key with an expiration time.
+    /// If the key exists, increments the key and doesn't extend the expiration time.
+    ///
+    /// Returns the order in which this specific key was received (1 for first time).
+    pub async fn increment(&mut self, _key: &str, _expiration_ms: u32) -> Result<u32, CacheError> {
+        Ok(1)
+    }
+
+    ///
+    /// Set the value of multiple keys
+    ///
+    pub async fn multiple_set(
+        &mut self,
+        _keyvals: Vec<(String, String)>,
+        _expiration_ms: u32,
+    ) -> Result<(), CacheError> {
+        Ok(())
+    }
+
+    ///
+    /// Get the value of multiple keys
+    ///
+    pub async fn multiple_get<T: std::str::FromStr>(
+        &mut self,
+        _keys: Vec<String>,
+    ) -> Result<Vec<T>, CacheError> {
+        Ok(vec![])
     }
 }

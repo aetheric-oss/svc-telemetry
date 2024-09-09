@@ -36,33 +36,26 @@ use tower_http::trace::TraceLayer;
 /// use std::sync::{Arc, Mutex};
 /// async fn example() -> Result<(), tokio::task::JoinError> {
 ///     let config = Config::default();
-///     let grpc_clients = GrpcClients::default(config.clone());
-///     tokio::spawn(rest_server(config, grpc_clients, None)).await;
+///     tokio::spawn(rest_server(config, None)).await;
 ///     Ok(())
 /// }
 /// ```
 pub async fn rest_server(
     config: Config,
-    grpc_clients: GrpcClients,
     shutdown_rx: Option<tokio::sync::oneshot::Receiver<()>>,
 ) -> Result<(), ()> {
     rest_info!("entry.");
     let rest_port = config.docker_port_rest;
-    let full_rest_addr: SocketAddr = match format!("[::]:{}", rest_port).parse() {
-        Ok(addr) => addr,
-        Err(e) => {
-            rest_error!("invalid address: {:?}, exiting.", e);
-            return Err(());
-        }
-    };
+    let full_rest_addr: SocketAddr = format!("[::]:{}", rest_port).parse().map_err(|e| {
+        rest_error!("invalid address: {:?}, exiting.", e);
+    })?;
 
-    let cors_allowed_origin = match config.rest_cors_allowed_origin.parse::<HeaderValue>() {
-        Ok(url) => url,
-        Err(e) => {
+    let cors_allowed_origin = config
+        .rest_cors_allowed_origin
+        .parse::<HeaderValue>()
+        .map_err(|e| {
             rest_error!("invalid cors_allowed_origin address: {:?}, exiting.", e);
-            return Err(());
-        }
-    };
+        })?;
 
     // Rate limiting
     let rate_limit = config.rest_request_limit_per_second as u64;
@@ -73,7 +66,7 @@ pub async fn rest_server(
             rest_warn!("too many requests: {}", e);
             (
                 StatusCode::TOO_MANY_REQUESTS,
-                "(rest_server) too many requests.".to_string(),
+                "too many requests.".to_string(),
             )
         }))
         .layer(BufferLayer::new(100))
@@ -109,18 +102,30 @@ pub async fn rest_server(
             .map(char::from)
             .collect(),
     ) {
+        Ok(_) => {}
+        Err(tokio::sync::SetError::AlreadyInitializedError(_)) => {
+            const ERROR_STR: &str = "JWT_SECRET already set.";
+            #[cfg(not(test))]
+            {
+                rest_error!("{}", ERROR_STR);
+                return Err(());
+            }
+
+            #[cfg(test)]
+            rest_warn!("{}", ERROR_STR);
+        }
         Err(e) => {
             rest_error!("could not set JWT_SECRET: {}", e);
             return Err(());
         }
-        _ => {
-            rest_info!("set JWT_SECRET.");
-        }
     }
+
+    rest_info!("set JWT_SECRET.");
 
     //
     // Create Server
     //
+    let grpc_clients = GrpcClients::default(config.clone());
     let app = Router::new()
         // must be first with its route layer
         .route("/telemetry/netrid", post(api::netrid::network_remote_id))
@@ -141,20 +146,16 @@ pub async fn rest_server(
         .layer(Extension(mq_channel))
         .layer(Extension(grpc_clients));
 
-    match axum::Server::bind(&full_rest_addr)
+    axum::Server::bind(&full_rest_addr)
         .serve(app.into_make_service())
         .with_graceful_shutdown(shutdown_signal("rest", shutdown_rx))
         .await
-    {
-        Ok(_) => {
-            rest_info!("hosted at: {}.", full_rest_addr);
-            Ok(())
-        }
-        Err(e) => {
+        .map_err(|e| {
             rest_error!("could not start server: {}", e);
-            Err(())
-        }
-    }
+        })?;
+
+    rest_info!("hosted at: {}.", full_rest_addr);
+    Ok(())
 }
 
 #[cfg(test)]

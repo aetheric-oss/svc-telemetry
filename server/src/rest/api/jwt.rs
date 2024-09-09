@@ -22,8 +22,8 @@ use axum::{
 };
 use hyper::Request;
 use lib_common::time::{Duration, Utc};
-use once_cell::sync::OnceCell;
 use serde::{Deserialize, Serialize};
+use tokio::sync::OnceCell;
 
 use axum_extra::extract::cookie::CookieJar;
 use jsonwebtoken::{decode, encode, Algorithm, DecodingKey, EncodingKey, Header, Validation};
@@ -31,8 +31,9 @@ use jsonwebtoken::{decode, encode, Algorithm, DecodingKey, EncodingKey, Header, 
 /// JWT Encryption Type
 const JWT_ENCRYPTION_TYPE: Algorithm = Algorithm::HS256;
 
-/// TODO(R5): This is a temporary solution, replace with PKI certificates
-pub static JWT_SECRET: OnceCell<String> = OnceCell::new();
+/// JWT Secret
+// TODO(R5): This is a temporary solution, replace with PKI certificates
+pub static JWT_SECRET: OnceCell<String> = OnceCell::const_new();
 
 /// JWT Expiration time in seconds
 const JWT_EXPIRE_SECONDS: i64 = 360; // TODO(R5): To configuration file
