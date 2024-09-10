@@ -2,7 +2,7 @@
 description = "Aetheric telemetry service gRPC client"
 keywords    = ["vtol", "client", "grpc", "telemetry"]  # max 5
 name        = "svc-telemetry-client-grpc"
-version     = "0.2.1-develop.5"
+version     = "0.2.1-develop.6"
 
 authors.workspace      = true
 categories.workspace   = true
