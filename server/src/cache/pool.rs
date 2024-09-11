@@ -154,8 +154,8 @@ impl GisPool {
     }
 }
 
-#[cfg(not(tarpaulin_include))]
 #[cfg(not(test))]
+#[cfg(not(tarpaulin_include))]
 // no_coverage: (R5) need redis backend to test
 impl TelemetryPool {
     /// Create a new TelemetryPool
@@ -345,8 +345,8 @@ impl TelemetryPool {
     }
 }
 
-#[cfg(not(tarpaulin_include))]
 #[cfg(test)]
+#[cfg(not(tarpaulin_include))]
 // no_coverage: (R5) need redis backend to test
 impl TelemetryPool {
     /// Create a new TelemetryPool
