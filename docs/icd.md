@@ -49,7 +49,8 @@ See the [Arrow API Documentation](https://www.arrowair.com/docs/category/apis) f
 | ---- | --- | ---- |
 | `/health` | GET | 200 OK if all microservice dependencies are connected to this service.
 | `/telemetry/adsb` | POST | Report a packet conforming to [ADS-B protocol](https://airmetar.main.jp/radio/ADS-B%20Decoding%20Guide.pdf).
-
+| `/telemetry/login` | GET | Request a JSON Web Token (JWT) for the vehicle to post network remote ID telemetry.
+| `/telemetry/netrid` | POST | Report a packet conforming to Network Remote ID protocol. Requires a JWT token (see `/telemetry/login`)
 
 ## :speech_balloon: gRPC
 

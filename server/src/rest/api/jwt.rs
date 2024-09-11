@@ -131,41 +131,41 @@ where
 
     // rest_debug!("request: {:?}", req);
     // rest_debug!("request headers: {:?}", req.headers());
-    let Some(header) = req.headers().get(header::AUTHORIZATION) else {
-        let message = "could not get authorization header.".to_string();
-        rest_warn!("{message}");
-        let json_error = ErrorResponse {
-            status: "fail".to_string(),
-            message,
-        };
+    req.headers()
+        .get(header::AUTHORIZATION)
+        .ok_or_else(|| {
+            let message = "could not get authorization header.".to_string();
+            rest_warn!("{message}");
+            let json_error = ErrorResponse {
+                status: "fail".to_string(),
+                message,
+            };
 
-        return Err((StatusCode::UNAUTHORIZED, Json(json_error)));
-    };
+            (StatusCode::UNAUTHORIZED, Json(json_error))
+        })? // auth header
+        .to_str()
+        .map_err(|e| {
+            let message = format!("could not parse authorization header: {e}.");
+            rest_warn!("{message}");
+            let json_error = ErrorResponse {
+                status: "fail".to_string(),
+                message,
+            };
 
-    let Some(auth_value) = header.to_str().ok() else {
-        let message = "could not parse authorization header.".to_string();
-        rest_warn!("{message}");
-        let json_error = ErrorResponse {
-            status: "fail".to_string(),
-            message,
-        };
+            (StatusCode::UNAUTHORIZED, Json(json_error))
+        })?
+        .strip_prefix("Bearer ")
+        .map(|substring| substring.to_owned())
+        .ok_or_else(|| {
+            let message = "You are not logged in, please provide token.".to_string();
+            rest_warn!("{message}");
+            let json_error = ErrorResponse {
+                status: "fail".to_string(),
+                message,
+            };
 
-        return Err((StatusCode::UNAUTHORIZED, Json(json_error)));
-    };
-
-    if let Some(substring) = auth_value.strip_prefix("Bearer ") {
-        // rest_debug!("request token: {substring}");
-        return Ok(substring.to_owned());
-    }
-
-    let message = "You are not logged in, please provide token.".to_string();
-    rest_warn!("{message}");
-    let json_error = ErrorResponse {
-        status: "fail".to_string(),
-        message,
-    };
-
-    Err((StatusCode::UNAUTHORIZED, Json(json_error)))
+            (StatusCode::UNAUTHORIZED, Json(json_error))
+        })
 }
 
 /// Authenticate a request with a JWT

@@ -103,7 +103,7 @@ async fn process_basic_message(
         }
     };
 
-    match mq_channel
+    let _ = mq_channel
         .basic_publish(
             crate::amqp::EXCHANGE_NAME_TELEMETRY,
             crate::amqp::ROUTING_KEY_NETRID_ID,
@@ -112,12 +112,12 @@ async fn process_basic_message(
             lapin::BasicProperties::default(),
         )
         .await
-    {
-        Ok(_) => rest_debug!("pushed aircraft id to RabbitMQ."),
-        Err(e) => {
+        .map_err(|e| {
             rest_warn!("could not push aircraft id to RabbitMQ: {e}.");
-        }
-    }
+        })
+        .map(|_| {
+            rest_debug!("pushed aircraft id to RabbitMQ.");
+        });
 
     Ok(())
 }
@@ -302,8 +302,6 @@ pub async fn network_remote_id(
             }
             Ordering::Greater => {
                 rest_info!("netrid reporter count is greater than needed: {count}.");
-
-                // TODO(R5) push up to N reporter confirmations to svc-storage with user_ids
                 return Ok(Json(count));
             }
             _ => (), // continue

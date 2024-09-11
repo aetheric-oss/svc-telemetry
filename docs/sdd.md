@@ -96,3 +96,58 @@ Invalid request packets will return `400 BAD REQUEST`.
 **(adsb) Off-Nominal**: Redis Cache Error
 
 If there was an issue updating the Redis cache, the server will reply an opaque `500 INTERNAL_SERVER_ERROR`.
+
+### `login` Handler
+
+The client will attempt to obtain a JWT token.
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant client as vehicle
+    participant service as svc-telemetry
+    client-->>service: (REST) GET /telemetry/login<br>Aircraft Id String in Request Body
+    alt invalid identifier string
+        service-->>client: 400 BAD REQUEST
+    end
+    note over service: Create JWT claim with internal secret key
+    service-->>client: Return encoded JWT key
+```
+
+:exclamation: This is not the final login scheme. In the future certificates will be used to ensure that the aircraft is who it reports to be.
+
+### `network_remote_id` Handler
+
+The client will attempt to post a packet conforming to remote ID protocol.
+
+An encoded JWT 'Bearer' token (obtained through the `/telemetry/login/` interface) needs to be provided.
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant client as Networked Node
+    participant service as svc-telemetry
+    participant redis as Redis Cache
+    participant gis as svc-gis
+    client-->>service: (REST) POST /telemetry/netrid
+    alt no auth token
+        service-->>client: 401 UNAUTHORIZED
+    end
+    note over service: decode JWT key, verify
+    alt invalid auth token
+        service-->>client: 401 UNAUTHORIZED
+    end
+    note over service: process provided packet
+    alt invalid packet size
+        service-->>client: 400 BAD_REQUEST
+    end
+    Note over service: Create key from netrid packet
+    service->>redis: INCR key<br>PEXPIRE KEY
+    Note over redis: If key doesn't exist,<br>inserts with a value of 1.
+    redis-->>service: N if N == (Value of this key in the cache)
+    alt N == 1
+        service-->>gis: Send processed position<br>or velocity
+        service-->>rabbitmq: Publish telemetry
+    end
+    service-->>client: (REST) Reply: N
+```
