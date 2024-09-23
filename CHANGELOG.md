@@ -1,3 +1,35 @@
+## [Release 0.3.0](https://github.com/aetheric-oss/svc-telemetry/releases/tag/v0.3.0)
+
+### ✨ Features
+
+- add network remoteid structures ([`75dc92c`](https://github.com/aetheric-oss/svc-telemetry/commit/75dc92caf891fa8ab8d135749f6c4f2d7cb1030f))
+- add aircraft ID and velocity support ([`fc6ddab`](https://github.com/aetheric-oss/svc-telemetry/commit/fc6ddab918b7fae4ece175b9059e90193fb5c24d))
+- add JWT login and auth for netrid ([`eae5534`](https://github.com/aetheric-oss/svc-telemetry/commit/eae55344154010572d49008de1069a80fa9f364e))
+- add adsb identifer and velocity support ([`15d2c7e`](https://github.com/aetheric-oss/svc-telemetry/commit/15d2c7ed28fd4d33ae4b115956303f52d58b6bf5))
+- change from ring buffers to redis queues ([`ab81d98`](https://github.com/aetheric-oss/svc-telemetry/commit/ab81d98c9cf3e7dd842cc181297f03b8043632fb))
+- add encoding for location message ([`a512730`](https://github.com/aetheric-oss/svc-telemetry/commit/a51273016b73e897f3482ebcebe17c262f07b13c))
+- fix encoding direction netrid bug ([`d69e691`](https://github.com/aetheric-oss/svc-telemetry/commit/d69e6919ca0541c454c0c8cb56f3d5f31d0dfc18))
+- allow use of session specific IDs ([`1ab4090`](https://github.com/aetheric-oss/svc-telemetry/commit/1ab4090d6db678dbe6c43d7293b6e67a49163dfb))
+
+### 🐛 Fixes
+
+- update cargo deps to aetheric-oss ([`b4c290c`](https://github.com/aetheric-oss/svc-telemetry/commit/b4c290cca9114fdbe65276a60f8fc15e7a1430d3))
+- fix failing tests ([`3e221e8`](https://github.com/aetheric-oss/svc-telemetry/commit/3e221e83550fa94b413b0c0dfe2a13593ebe9853))
+- failing tests ([`01e770d`](https://github.com/aetheric-oss/svc-telemetry/commit/01e770dffe21126c285d8866e37c079477b6cbcc))
+- tarpaulin rationale ([`2acb018`](https://github.com/aetheric-oss/svc-telemetry/commit/2acb018f8e70fdd81b8288b0d991e09a482d345e))
+
+### 🛠 Maintenance
+
+- terraform provisioned file changes ([`e122709`](https://github.com/aetheric-oss/svc-telemetry/commit/e122709658c0401aeb0a190229c31948375879f8))
+- bring repo in line with template ([`06f3aa0`](https://github.com/aetheric-oss/svc-telemetry/commit/06f3aa0e834af69ff831e2df0bc3495fafd888c3))
+- remove mavlink support ([`0225796`](https://github.com/aetheric-oss/svc-telemetry/commit/0225796ed6bbeb8c216923aba0a529408b12d00c))
+- add netrid example to test JWT exchange ([`611d7fb`](https://github.com/aetheric-oss/svc-telemetry/commit/611d7fbff443b461984f0df502c90009b2ca10f3))
+- tofu provisioned file changes ([`9e2ab4f`](https://github.com/aetheric-oss/svc-telemetry/commit/9e2ab4f3d9ae8440cda7476182797dbe787a9e80))
+- fix excessive log output ([`adae14d`](https://github.com/aetheric-oss/svc-telemetry/commit/adae14d1650791c25ce87e43522021dc7b422f97))
+- update old references ([`00e7bc5`](https://github.com/aetheric-oss/svc-telemetry/commit/00e7bc546dcd07bbae82abc60c5c55fde5793c5e))
+- refactor and improve unit tests ([`5fa6bc1`](https://github.com/aetheric-oss/svc-telemetry/commit/5fa6bc156057c73bf81164c77312965e4790cfbd))
+- update docs ([`11aff16`](https://github.com/aetheric-oss/svc-telemetry/commit/11aff1692aca31d0b4b404836096f73fb56f90b0))
+
 ## [Release 0.2.0](https://github.com/Arrow-air/svc-telemetry/releases/tag/v0.2.0)
 
 ### ✨ Features
