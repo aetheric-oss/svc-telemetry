@@ -19,39 +19,31 @@ impl AMQPPool {
     pub fn new(config: crate::config::Config) -> Result<Self, AMQPError> {
         // the .env file must have REDIS__URL="redis://<host>>:<port>"
         let cfg: deadpool_lapin::Config = config.amqp.clone();
-        let Some(details) = cfg.url.clone() else {
+        let details = cfg.url.clone().ok_or_else(|| {
             amqp_error!("(AMQPPool new) no connection address found.");
             amqp_debug!("(AMQPPool new) Available config: {:?}", &config.amqp);
-            return Err(AMQPError::MissingConfiguration);
-        };
+            AMQPError::MissingConfiguration
+        })?;
 
         amqp_info!("(AMQPPool new) creating pool at {:?}...", details);
-        match cfg.create_pool(Some(Runtime::Tokio1)) {
-            Ok(pool) => {
-                amqp_info!("(AMQPPool new) pool created.");
-                Ok(AMQPPool { pool })
-            }
-            Err(e) => {
-                amqp_error!("(AMQPPool new) could not create pool: {}", e);
-                Err(AMQPError::CouldNotConnect)
-            }
-        }
+        // no_coverage: this won't fail
+        let pool: Pool = cfg.create_pool(Some(Runtime::Tokio1)).map_err(|e| {
+            amqp_error!("(AMQPPool new) could not create pool: {}", e);
+            AMQPError::CouldNotConnect
+        })?;
+
+        Ok(Self { pool })
     }
 
     /// Get a connection from the pool
-    #[cfg(not(tarpaulin_include))]
-    //
     pub async fn get_connection(&self) -> Result<Object, AMQPError> {
-        match self.pool.get().await {
-            Ok(connection) => Ok(connection),
-            Err(e) => {
-                amqp_error!(
-                    "(AMQPPool get_connection) could not connect to deadpool: {}",
-                    e
-                );
-                Err(AMQPError::CouldNotConnect)
-            }
-        }
+        self.pool.get().await.map_err(|e| {
+            amqp_error!(
+                "(AMQPPool get_connection) could not connect to deadpool: {}",
+                e
+            );
+            AMQPError::CouldNotConnect
+        })
     }
 }
 
@@ -62,16 +54,25 @@ mod tests {
     #[tokio::test]
     #[cfg(feature = "stub_backends")]
     async fn test_amqp_pool_new_failure() {
-        let config = crate::config::Config::default();
-        let result = AMQPPool::new(config.clone());
-        assert!(result.is_err());
+        let mut config = crate::config::Config::default();
+        let result = AMQPPool::new(config.clone()).unwrap_err();
+        assert_eq!(result, AMQPError::MissingConfiguration);
+
+        // Invalid URL
+        // config.amqp.url = Some("".to_string());
+        // let result = AMQPPool::new(config.clone()).unwrap_err();
+        // assert_eq!(result, AMQPError::CouldNotConnect);
+
+        // Valid URL
+        config.amqp.url = Some("amqp://localhost:5672".to_string());
+        AMQPPool::new(config.clone()).unwrap();
     }
 
     #[tokio::test]
     #[cfg(not(feature = "stub_backends"))]
     async fn test_amqp_pool_new() {
         let config = crate::config::Config::default();
-        let result = AMQPPool::new(config.clone());
-        assert!(result.is_ok());
+        let pool = AMQPPool::new(config.clone()).unwrap();
+        let _ = pool.get_connection().await.unwrap();
     }
 }

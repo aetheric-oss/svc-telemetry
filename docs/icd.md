@@ -1,4 +1,4 @@
-![Arrow Banner](https://github.com/Arrow-air/tf-github/raw/main/src/templates/doc-banner-services.png)
+![Aetheric Banner](https://github.com/aetheric-oss/.github/raw/main/assets/doc-banner.png)
 
 # Interface Control Document (ICD) - `svc-telemetry`
 
@@ -10,23 +10,23 @@ This document defines the gRPC and REST interfaces unique to the `svc-telemetry`
 
 | Attribute     | Description                                                       |
 | ------------- |-------------------------------------------------------------------|
-| Maintainer(s) | [Services Team](https://github.com/orgs/Arrow-air/teams/services) |
-| Stuckee       | A.M. Smith ([@ServiceDog](https://github.com/servicedog))         |
+| Maintainer(s) | [Aetheric Realm Team](https://github.com/orgs/aetheric-oss/teams/dev-realm) |
+| Stuckee       | A.M. Smith ([@amsmith-pro](https://github.com/amsmith-pro))         |
 | Status        | Draft                                                             |
 
 ## :books: Related Documents
 
 Document | Description
 --- | ---
-[High-Level Concept of Operations (CONOPS)](https://github.com/Arrow-air/se-services/blob/develop/docs/conops.md) | Overview of Arrow microservices.
-[High-Level Interface Control Document (ICD)](https://github.com/Arrow-air/se-services/blob/develop/docs/icd.md)  | Interfaces and frameworks common to all Arrow microservices.
-[Requirements - `svc-telemetry`](https://nocodb.arrowair.com/dashboard/#/nc/view/6ffa7547-b2ab-4d02-b5cb-ed2d3c60e2c7) | Requirements and user stories for this microservice.
+[High-Level Concept of Operations (CONOPS)](https://github.com/aetheric-oss/se-services/blob/develop/docs/conops.md) | Overview of Aetheric microservices.
+[High-Level Interface Control Document (ICD)](https://github.com/aetheric-oss/se-services/blob/develop/docs/icd.md)  | Interfaces and frameworks common to all Aetheric microservices.
+[Requirements - `svc-telemetry`](https://nocodb.aetheric.nl/dashboard/#/nc/view/6ffa7547-b2ab-4d02-b5cb-ed2d3c60e2c7) | Requirements and user stories for this microservice.
 [Concept of Operations - `svc-telemetry`](./conops.md) | Defines the motivation and duties of this microservice.
 [Software Design Document (SDD) - `svc-telemetry`](./sdd.md) | Specifies the internal activity of this microservice.
 
 ## :hammer: Frameworks
 
-See [High-Level Services ICD](https://github.com/Arrow-air/se-services/blob/develop/docs/icd.md).
+See [High-Level Services ICD](https://github.com/aetheric-oss/se-services/blob/develop/docs/icd.md).
 
 ## :mailbox: REST
 
@@ -39,7 +39,7 @@ Filename | Description
 
 ### Authentication
 
-See [High-Level Services ICD](https://github.com/Arrow-air/se-services/blob/develop/docs/icd.md).
+See [High-Level Services ICD](https://github.com/aetheric-oss/se-services/blob/develop/docs/icd.md).
 
 ### Endpoints
 
@@ -48,9 +48,9 @@ See the [Arrow API Documentation](https://www.arrowair.com/docs/category/apis) f
 | Endpoint | Type | Description |
 | ---- | --- | ---- |
 | `/health` | GET | 200 OK if all microservice dependencies are connected to this service.
-| `/telemetry/aircraft/adsb` | POST | Report a packet conforming to [ADS-B protocol](https://airmetar.main.jp/radio/ADS-B%20Decoding%20Guide.pdf).
-| `/telemetry/mavlink/adsb` | POST | Report a [Mavlink protocol](https://mavlink.io/en/guide/serialization.html) packet with an [ADS-B message payload](https://mavlink.io/en/messages/common.html#ADSB_VEHICLE).
-
+| `/telemetry/adsb` | POST | Report a packet conforming to [ADS-B protocol](https://airmetar.main.jp/radio/ADS-B%20Decoding%20Guide.pdf).
+| `/telemetry/login` | GET | Request a JSON Web Token (JWT) for the vehicle to post network remote ID telemetry.
+| `/telemetry/netrid` | POST | Report a packet conforming to Network Remote ID protocol. Requires a JWT token (see `/telemetry/login`)
 
 ## :speech_balloon: gRPC
 
@@ -61,7 +61,7 @@ See the [Arrow API Documentation](https://www.arrowair.com/docs/category/apis) f
 
 ### Integrated Authentication & Encryption
 
-See [High-Level Services ICD](https://github.com/Arrow-air/se-services/blob/develop/docs/icd.md).
+See [High-Level Services ICD](https://github.com/aetheric-oss/se-services/blob/develop/docs/icd.md).
 
 ### GRPC Server Methods ("Services")
 

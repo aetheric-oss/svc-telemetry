@@ -1,18 +1,15 @@
 //! gRPC client helpers implementation
-
-use lib_common::grpc::{Client, GrpcClient};
-use svc_gis_client_grpc::client::rpc_service_client::RpcServiceClient as GisClient;
-use svc_storage_client_grpc::Clients;
-pub use tonic::transport::Channel;
+use svc_gis_client_grpc::prelude::Client;
+use svc_gis_client_grpc::prelude::GisClient;
+use svc_storage_client_grpc::prelude::Clients;
 
 /// Struct to hold all gRPC client connections
 #[derive(Clone, Debug)]
 pub struct GrpcClients {
-    /// svc-storage ADS-B Client
+    /// All clients enabled from the svc_storage_grpc_client module
     pub storage: Clients,
-
-    /// svc-gis client
-    pub gis: GrpcClient<GisClient<Channel>>,
+    /// A GrpcClient provided by the svc_gis_grpc_client module
+    pub gis: GisClient,
 }
 
 impl GrpcClients {
@@ -22,31 +19,33 @@ impl GrpcClients {
 
         GrpcClients {
             storage: storage_clients,
-            gis: GrpcClient::<GisClient<Channel>>::new_client(
-                &config.gis_host_grpc,
-                config.gis_port_grpc,
-                "gis",
-            ),
+            gis: GisClient::new_client(&config.gis_host_grpc, config.gis_port_grpc, "gis"),
         }
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use svc_storage_client_grpc::prelude::*;
-
     use super::*;
+    use svc_gis_client_grpc::prelude::Client as GisClient;
+    // use svc_storage_client_grpc::prelude::Client as StorageClient;
 
     #[tokio::test]
     async fn test_grpc_clients_default() {
+        lib_common::logger::get_log_handle().await;
+        ut_info!("Start.");
+
         let config = crate::config::Config::default();
         let clients = GrpcClients::default(config);
+
         let adsb = &clients.storage.adsb;
-        println!("{:?}", adsb);
+        ut_debug!("adsb: {:?}", adsb);
         assert_eq!(adsb.get_name(), "adsb");
 
         let gis = &clients.gis;
-        println!("{:?}", gis);
+        ut_debug!("gis: {:?}", gis);
         assert_eq!(gis.get_name(), "gis");
+
+        ut_info!("Success.");
     }
 }

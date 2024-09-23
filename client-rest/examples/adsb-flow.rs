@@ -11,29 +11,21 @@ async fn mq_listener() -> Result<(), ()> {
     // Establish connection to RabbitMQ node
     println!("(mq_listener) connecting to MQ server at {}...", mq_addr);
     let result = lapin::Connection::connect(&mq_addr, lapin::ConnectionProperties::default()).await;
-    let mq_connection = match result {
-        Ok(conn) => conn,
-        Err(e) => {
-            println!("(mq_listener) could not connect to MQ server at {mq_addr}.");
-            println!("(mq_listener) error: {:?}", e);
-            return Err(());
-        }
-    };
+    let mq_connection = result.map_err(|e| {
+        println!("(mq_listener) could not connect to MQ server at {mq_addr}.");
+        println!("(mq_listener) error: {:?}", e);
+    })?;
 
     // Create channel
     println!("(mq_listener) creating channel at {}...", mq_addr);
-    let mq_channel = match mq_connection.create_channel().await {
-        Ok(channel) => channel,
-        Err(e) => {
-            println!("(mq_listener) could not create channel at {mq_addr}.");
-            println!("(mq_listener) error: {:?}", e);
-            return Err(());
-        }
-    };
+    let mq_channel = mq_connection.create_channel().await.map_err(|e| {
+        println!("(mq_listener) could not create channel at {mq_addr}.");
+        println!("(mq_listener) error: {:?}", e);
+    })?;
 
     let mut consumer = mq_channel
         .basic_consume(
-            "adsb",
+            "netrid_id",
             "mq_listener",
             lapin::options::BasicConsumeOptions::default(),
             lapin::types::FieldTable::default(),
@@ -53,9 +45,9 @@ async fn adsb(url: String) {
         .pool_idle_timeout(std::time::Duration::from_secs(10))
         .build_http();
 
-    let uri = format!("{}/telemetry/aircraft/adsb", url);
+    let uri = format!("{}/telemetry/adsb", url);
 
-    // TODO(R4): different reporter ID
+    // TODO(R5): different reporter ID
 
     let mut count: u8 = 0;
     let mut odd_flag = 1;
@@ -71,13 +63,13 @@ async fn adsb(url: String) {
         };
 
         count += 1;
-        odd_flag = 1 - odd_flag;
+        odd_flag ^= 1;
 
-        let req = Request::builder()
+        let req: Request<Body> = Request::builder()
             .method(Method::POST)
             .uri(uri.clone())
             .header("content-type", "application/octet-stream")
-            .body(Body::from(payload.clone().to_vec()))
+            .body(hyper::body::Bytes::from(payload.to_vec()).into())
             .unwrap();
 
         match client.request(req).await {

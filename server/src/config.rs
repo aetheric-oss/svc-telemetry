@@ -122,8 +122,11 @@ impl Config {
 mod tests {
     use super::*;
 
-    #[test]
-    fn test_config_from_default() {
+    #[tokio::test]
+    async fn test_config_from_default() {
+        lib_common::logger::get_log_handle().await;
+        ut_info!("Start.");
+
         let config = Config::default();
 
         assert_eq!(config.docker_port_grpc, 50051);
@@ -147,9 +150,14 @@ mod tests {
             config.rest_cors_allowed_origin,
             String::from("http://localhost:3000")
         );
+        ut_info!("Success.");
     }
-    #[test]
-    fn test_config_from_env() {
+
+    #[tokio::test]
+    async fn test_config_from_env() {
+        lib_common::logger::get_log_handle().await;
+        ut_info!("Start.");
+
         std::env::set_var("DOCKER_PORT_GRPC", "6789");
         std::env::set_var("DOCKER_PORT_REST", "9876");
         std::env::set_var("STORAGE_HOST_GRPC", "test_host_grpc");
@@ -203,5 +211,7 @@ mod tests {
             Some(String::from("redis://test_redis:6379"))
         );
         assert!(config.redis.pool.is_some());
+
+        ut_info!("Success.");
     }
 }

@@ -8,12 +8,12 @@ service RpcService {
     rpc isReady (ReadyRequest) returns (ReadyResponse);
 }
 
-// Ready request object
+// Ready Request object
 message ReadyRequest {
     // No arguments
 }
 
-// Ready response object
+// Ready Response object
 message ReadyResponse {
 
     // True if ready

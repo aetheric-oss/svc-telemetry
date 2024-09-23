@@ -1,4 +1,4 @@
-![Arrow Banner](https://github.com/Arrow-air/tf-github/raw/main/src/templates/doc-banner-services.png)
+![Aetheric Banner](https://github.com/aetheric-oss/.github/raw/main/assets/doc-banner.png)
 
 # Software Design Document (SDD) - `svc-telemetry`
 
@@ -16,17 +16,17 @@ aircraft ADS-B message received by multiple networked towers within range.
 
 | Attribute     | Description                                                       |
 | ------------- |-------------------------------------------------------------------|
-| Maintainer(s) | [Services Team](https://github.com/orgs/Arrow-air/teams/services) |
-| Stuckee       | A.M. Smith ([@ServiceDog](https://github.com/ServiceDog))         |
+| Maintainer(s) | [Aetheric Realm Team](https://github.com/orgs/aetheric-oss/teams/dev-realm) |
+| Stuckee       | A.M. Smith ([@amsmith-pro](https://github.com/amsmith-pro))         |
 | Status        | Development                                                       |
 
 ## :books: Related Documents
 
 Document | Description
 --- | ---
-[High-Level Concept of Operations (CONOPS)](https://github.com/Arrow-air/se-services/blob/develop/docs/conops.md) | Overview of Arrow microservices.
-[High-Level Interface Control Document (ICD)](https://github.com/Arrow-air/se-services/blob/develop/docs/icd.md)  | Interfaces and frameworks common to all Arrow microservices.
-[Requirements - `svc-telemetry`](https://nocodb.arrowair.com/dashboard/#/nc/view/6ffa7547-b2ab-4d02-b5cb-ed2d3c60e2c7) | Requirements and user stories for this microservice.
+[High-Level Concept of Operations (CONOPS)](https://github.com/aetheric-oss/se-services/blob/develop/docs/conops.md) | Overview of Aetheric microservices.
+[High-Level Interface Control Document (ICD)](https://github.com/aetheric-oss/se-services/blob/develop/docs/icd.md)  | Interfaces and frameworks common to all Aetheric microservices.
+[Requirements - `svc-telemetry`](https://nocodb.aetheric.nl/dashboard/#/nc/view/6ffa7547-b2ab-4d02-b5cb-ed2d3c60e2c7) | Requirements and user stories for this microservice.
 [Concept of Operations - `svc-telemetry`](./conops.md) | Defines the motivation and duties of this microservice.
 [Interface Control Document (ICD) - `svc-telemetry`](./icd.md) | Defines the inputs and outputs of this microservice.
 
@@ -77,7 +77,7 @@ sequenceDiagram
     participant service as svc-telemetry
     participant redis as Redis Cache
     participant storage as svc-storage
-    client-->>service: (REST) POST /telemetry/aircraft/adsb
+    client-->>service: (REST) POST /telemetry/adsb
     Note over service: Create key from ADS-B:<br>ICAO address and calculated CRC32
     service->>redis: INCR key<br>PEXPIRE KEY 5000
     Note over redis: If key doesn't exist,<br>inserts with a value of 1.
@@ -97,31 +97,57 @@ Invalid request packets will return `400 BAD REQUEST`.
 
 If there was an issue updating the Redis cache, the server will reply an opaque `500 INTERNAL_SERVER_ERROR`.
 
+### `login` Handler
 
-### `mavlink_adsb` Handler
+The client will attempt to obtain a JWT token.
 
-The client will attempt to post a packet conforming to [Mavlink protocol](https://mavlink.io/en/guide/serialization.html) with an [ADS-B message payload](https://mavlink.io/en/messages/common.html#ADSB_VEHICLE).
+```mermaid
+sequenceDiagram
+    autonumber
+    participant client as vehicle
+    participant service as svc-telemetry
+    client-->>service: (REST) GET /telemetry/login<br>Aircraft Id String in Request Body
+    alt invalid identifier string
+        service-->>client: 400 BAD REQUEST
+    end
+    note over service: Create JWT claim with internal secret key
+    service-->>client: Return encoded JWT key
+```
 
-**(mavlink_adsb) Nominal**
+:exclamation: This is not the final login scheme. In the future certificates will be used to ensure that the aircraft is who it reports to be.
+
+### `network_remote_id` Handler
+
+The client will attempt to post a packet conforming to remote ID protocol.
+
+An encoded JWT 'Bearer' token (obtained through the `/telemetry/login/` interface) needs to be provided.
+
 ```mermaid
 sequenceDiagram
     autonumber
     participant client as Networked Node
     participant service as svc-telemetry
     participant redis as Redis Cache
-    participant storage as svc-storage
-    client-->>service: (REST) POST /telemetry/mavlink/adsb
-    Note over service: Create key from<br>mavlink header fields:<br>ICAO address and sequence number.
-    service->>redis: INCR key<br>PEXPIRE KEY 5000
+    participant gis as svc-gis
+    client-->>service: (REST) POST /telemetry/netrid
+    alt no auth token
+        service-->>client: 401 UNAUTHORIZED
+    end
+    note over service: decode JWT key, verify
+    alt invalid auth token
+        service-->>client: 401 UNAUTHORIZED
+    end
+    note over service: process provided packet
+    alt invalid packet size
+        service-->>client: 400 BAD_REQUEST
+    end
+    Note over service: Create key from netrid packet
+    service->>redis: INCR key<br>PEXPIRE KEY
     Note over redis: If key doesn't exist,<br>inserts with a value of 1.
     redis-->>service: N if N == (Value of this key in the cache)
+    alt N == 1
+        service-->>gis: Send processed position<br>or velocity
+        service-->>rabbitmq: Publish telemetry
+    end
     service-->>client: (REST) Reply: N
 ```
-
-**(mavlink_adsb) Off-Nominal**: Invalid packet
-
-Invalid request packets will return `400 BAD REQUEST`.
-
-**(mavlink_adsb) Off-Nominal**: Redis Cache Error
-
-If there was an issue updating the Redis cache, the server will reply an opaque `500 INTERNAL_SERVER_ERROR`.

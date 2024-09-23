@@ -2,8 +2,8 @@
 
 use super::api;
 use crate::amqp::init_mq;
-use crate::cache::pool::RedisPool;
-use crate::cache::RedisPools;
+use crate::cache::pool::{GisPool, TelemetryPool};
+use crate::cache::TelemetryPools;
 use crate::grpc::client::GrpcClients;
 use crate::shutdown_signal;
 use crate::Config;
@@ -11,12 +11,11 @@ use axum::{
     error_handling::HandleErrorLayer,
     extract::Extension,
     http::{HeaderValue, StatusCode},
-    routing, BoxError, Router,
+    routing::{get, post},
+    BoxError, Router,
 };
-use std::collections::VecDeque;
+use rand::{distributions::Alphanumeric, Rng};
 use std::net::SocketAddr;
-use std::sync::{Arc, Mutex};
-use svc_gis_client_grpc::client::AircraftPosition;
 use tower::{
     buffer::BufferLayer,
     limit::{ConcurrencyLimitLayer, RateLimitLayer},
@@ -31,47 +30,32 @@ use tower_http::trace::TraceLayer;
 /// ```
 /// use svc_telemetry::rest::server::rest_server;
 /// use svc_telemetry::grpc::client::GrpcClients;
-/// use svc_gis_client_grpc::client::AircraftPosition;
+/// use svc_gis_client_grpc::prelude::types::{AircraftPosition, AircraftVelocity, AircraftId};
 /// use svc_telemetry::Config;
 /// use std::collections::VecDeque;
 /// use std::sync::{Arc, Mutex};
 /// async fn example() -> Result<(), tokio::task::JoinError> {
 ///     let config = Config::default();
-///     let ring = Arc::new(Mutex::new(VecDeque::<AircraftPosition>::with_capacity(10)));
-///     let grpc_clients = GrpcClients::default(config.clone());
-///     tokio::spawn(rest_server(config, grpc_clients, ring, None)).await;
+///     tokio::spawn(rest_server(config, None)).await;
 ///     Ok(())
 /// }
 /// ```
-#[cfg(not(tarpaulin_include))]
-// no_coverage: Needs running backends to work.
-// Will be tested in integration tests.
 pub async fn rest_server(
     config: Config,
-    grpc_clients: GrpcClients,
-    ring: Arc<Mutex<VecDeque<AircraftPosition>>>,
     shutdown_rx: Option<tokio::sync::oneshot::Receiver<()>>,
 ) -> Result<(), ()> {
-    rest_info!("(rest_server) entry.");
+    rest_info!("entry.");
     let rest_port = config.docker_port_rest;
-    let full_rest_addr: SocketAddr = match format!("[::]:{}", rest_port).parse() {
-        Ok(addr) => addr,
-        Err(e) => {
-            rest_error!("(rest_server) invalid address: {:?}, exiting.", e);
-            return Err(());
-        }
-    };
+    let full_rest_addr: SocketAddr = format!("[::]:{}", rest_port).parse().map_err(|e| {
+        rest_error!("invalid address: {:?}, exiting.", e);
+    })?;
 
-    let cors_allowed_origin = match config.rest_cors_allowed_origin.parse::<HeaderValue>() {
-        Ok(url) => url,
-        Err(e) => {
-            rest_error!(
-                "(rest_server) invalid cors_allowed_origin address: {:?}, exiting.",
-                e
-            );
-            return Err(());
-        }
-    };
+    let cors_allowed_origin = config
+        .rest_cors_allowed_origin
+        .parse::<HeaderValue>()
+        .map_err(|e| {
+            rest_error!("invalid cors_allowed_origin address: {:?}, exiting.", e);
+        })?;
 
     // Rate limiting
     let rate_limit = config.rest_request_limit_per_second as u64;
@@ -79,10 +63,10 @@ pub async fn rest_server(
     let limit_middleware = ServiceBuilder::new()
         .layer(TraceLayer::new_for_http())
         .layer(HandleErrorLayer::new(|e: BoxError| async move {
-            rest_warn!("(rest_server) too many requests: {}", e);
+            rest_warn!("too many requests: {}", e);
             (
                 StatusCode::TOO_MANY_REQUESTS,
-                "(rest_server) too many requests.".to_string(),
+                "too many requests.".to_string(),
             )
         }))
         .layer(BufferLayer::new(100))
@@ -97,29 +81,59 @@ pub async fn rest_server(
     //
 
     // Redis Pools
-    let pools = RedisPools {
-        mavlink: RedisPool::new(config.clone(), "tlm:mav").await?,
-        adsb: RedisPool::new(config.clone(), "tlm:adsb").await?,
+    let tlm_pools = TelemetryPools {
+        adsb: TelemetryPool::new(config.clone(), "tlm:adsb").await?,
+        netrid: TelemetryPool::new(config.clone(), "tlm:netrid").await?,
     };
 
+    let gis_pool = GisPool::new(config.clone()).await?;
+
     // RabbitMQ Channel
-    let mq_channel = init_mq(config.clone())
-        .await
-        .map_err(|_| rest_error!("(rest_server) could not create RabbitMQ Channel."));
+    let mq_channel = init_mq(config.clone()).await.map_err(|e| {
+        rest_error!("could not create RabbitMQ Channel: {e}");
+    })?;
+
+    // TODO(R5): Replace with PKI certificates
+    // Temporarily set JWT token to a random string
+    match crate::rest::api::jwt::JWT_SECRET.set(
+        rand::thread_rng()
+            .sample_iter(&Alphanumeric)
+            .take(42)
+            .map(char::from)
+            .collect(),
+    ) {
+        Ok(_) => {}
+        Err(tokio::sync::SetError::AlreadyInitializedError(_)) => {
+            const ERROR_STR: &str = "JWT_SECRET already set.";
+            #[cfg(not(test))]
+            {
+                rest_error!("{}", ERROR_STR);
+                return Err(());
+            }
+
+            #[cfg(test)]
+            rest_warn!("{}", ERROR_STR);
+        }
+        Err(e) => {
+            rest_error!("could not set JWT_SECRET: {}", e);
+            return Err(());
+        }
+    }
+
+    rest_info!("set JWT_SECRET.");
 
     //
     // Create Server
     //
+    let grpc_clients = GrpcClients::default(config.clone());
     let app = Router::new()
-        .route("/health", routing::get(api::health::health_check))
-        .route(
-            "/telemetry/mavlink/adsb",
-            routing::post(api::mavlink::mavlink_adsb),
-        )
-        .route(
-            "/telemetry/aircraft/adsb",
-            routing::post(api::aircraft::aircraft_adsb),
-        )
+        // must be first with its route layer
+        .route("/telemetry/netrid", post(api::netrid::network_remote_id))
+        .route_layer(axum::middleware::from_fn(crate::rest::api::jwt::auth))
+        // other routes after route_layer not affected
+        .route("/health", get(api::health::health_check))
+        .route("/telemetry/login", get(crate::rest::api::jwt::login))
+        .route("/telemetry/adsb", post(api::adsb::adsb))
         .layer(
             CorsLayer::new()
                 .allow_origin(cors_allowed_origin)
@@ -127,26 +141,46 @@ pub async fn rest_server(
                 .allow_methods(Any),
         )
         .layer(limit_middleware)
-        .layer(Extension(pools))
+        .layer(Extension(tlm_pools))
+        .layer(Extension(gis_pool))
         .layer(Extension(mq_channel))
-        .layer(Extension(grpc_clients))
-        .layer(Extension(ring));
+        .layer(Extension(grpc_clients));
 
-    //
-    // Bind to address
-    //
-    match axum::Server::bind(&full_rest_addr)
+    axum::Server::bind(&full_rest_addr)
         .serve(app.into_make_service())
         .with_graceful_shutdown(shutdown_signal("rest", shutdown_rx))
         .await
-    {
-        Ok(_) => {
-            rest_info!("(rest_server) hosted at: {}.", full_rest_addr);
-            Ok(())
-        }
-        Err(e) => {
-            rest_error!("(rest_server) could not start server: {}", e);
-            Err(())
-        }
+        .map_err(|e| {
+            rest_error!("could not start server: {}", e);
+        })?;
+
+    rest_info!("hosted at: {}.", full_rest_addr);
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn test_server_start_and_shutdown() {
+        use tokio::time::{sleep, Duration};
+        lib_common::logger::get_log_handle().await;
+        ut_info!("start");
+
+        let config = Config::default();
+
+        let (shutdown_tx, shutdown_rx) = tokio::sync::oneshot::channel::<()>();
+
+        // Start the rest server
+        tokio::spawn(rest_server(config, Some(shutdown_rx)));
+
+        // Give the server time to get through the startup sequence (and thus code)
+        sleep(Duration::from_secs(1)).await;
+
+        // Shut down server
+        assert!(shutdown_tx.send(()).is_ok());
+
+        ut_info!("success");
     }
 }
